@@ -1,0 +1,35 @@
+<section class="grid-two">
+  <article class="card">
+    <div class="section-heading">
+      <h2>Timeline editor</h2>
+      <p class="muted">Edit the structured Mermaid file directly. Unsupported Mermaid is preserved without overwriting project data.</p>
+    </div>
+    <form class="form-grid" method="post" action="{{ request.url_for('timeline_save', slug=project.slug) }}">
+      <label class="full-span">
+        Mermaid source
+        <textarea class="timeline-editor" id="timeline-editor" name="timeline_text" rows="20">{{ timeline_text }}</textarea>
+      </label>
+      <label class="full-span">
+        Addendum note
+        <input type="text" name="change_note" placeholder="Summarize the timeline change">
+      </label>
+      <div class="actions-row full-span">
+        <button class="button button-primary" type="submit">Save timeline</button>
+      </div>
+    </form>
+    <form class="inline-actions" method="post" action="{{ request.url_for('timeline_regenerate', slug=project.slug) }}">
+      <input type="text" name="change_note" placeholder="Optional note for regeneration">
+      <button class="button button-subtle" type="submit">Regenerate from project data</button>
+    </form>
+  </article>
+
+  <article class="card">
+    <div class="section-heading">
+      <h2>Preview</h2>
+      <p class="muted">Mermaid refreshes as you edit.</p>
+    </div>
+    <div class="mermaid-shell">
+      <pre class="mermaid mermaid-wide" id="timeline-preview">{{ timeline_text }}</pre>
+    </div>
+  </article>
+</section>

@@ -1,0 +1,35 @@
+[project]
+name = "projstatus"
+version = "0.1.0"
+description = "Local-first project management app backed by JSON, Markdown, and Mermaid files."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0,<1.0.0",
+    "jinja2>=3.1.0,<4.0.0",
+    "markdown>=3.7,<4.0.0",
+    "python-multipart>=0.0.9,<1.0.0",
+    "python-pptx>=1.0.2,<2.0.0",
+    "pydantic>=2.9.0,<3.0.0",
+    "uvicorn[standard]>=0.30.0,<1.0.0",
+]
+
+[project.optional-dependencies]
+exports = [
+    "playwright>=1.53.0,<2.0.0",
+]
+dev = [
+    "httpx>=0.28.0,<1.0.0",
+    "pytest>=8.3.0,<9.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"

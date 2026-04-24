@@ -1,0 +1,158 @@
+{% set content_body = sections["content"] %}
+{% set roadblock_body = sections["roadblocks"] %}
+
+<section class="view-mode-shell">
+  <section class="view-kpi-grid">
+    <article class="view-kpi-card">
+      <span>Stakeholders</span>
+      <strong>{{ project.people|length }}</strong>
+      <small>{{ project.people[0].name if project.people else "Add project people to show owners here." }}</small>
+    </article>
+    <article class="view-kpi-card">
+      <span>Milestones</span>
+      <strong>{{ project.milestones|length }}</strong>
+      <small>{{ upcoming_milestones[0].title if upcoming_milestones else "No milestones scheduled yet." }}</small>
+    </article>
+    <article class="view-kpi-card">
+      <span>Tasks</span>
+      <strong>{{ project.tasks|length }}</strong>
+      <small>{{ project.board_columns|join(" / ") }}</small>
+    </article>
+    <article class="view-kpi-card danger">
+      <span>Roadblocks</span>
+      <strong>{{ blocked_tasks|length }}</strong>
+      <small>{% if blocked_tasks %}Needs follow-up{% else %}No blocked tasks right now{% endif %}</small>
+    </article>
+  </section>
+
+  <section class="card view-timeline-panel">
+    <div class="section-heading">
+      <div>
+        <p class="eyebrow">Project view mode</p>
+        <h2>Executive snapshot</h2>
+      </div>
+      <div class="view-legend">
+        <span class="legend-chip legend-planned">Planned</span>
+        <span class="legend-chip legend-active">In Progress</span>
+        <span class="legend-chip legend-done">Done</span>
+        <span class="legend-chip legend-blocked">Blocked</span>
+        <span class="legend-chip legend-milestone">Milestone</span>
+      </div>
+    </div>
+    <div class="mermaid-shell">
+      <pre class="mermaid mermaid-wide">{{ timeline_text }}</pre>
+    </div>
+  </section>
+
+  <section class="view-mode-grid">
+    <article class="card view-panel view-panel-wide">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Content</p>
+          <h2>Project narrative</h2>
+        </div>
+      </div>
+      {% if content_body.strip() %}
+        <div class="markdown-preview view-markdown">{{ content_body | markdownify | safe }}</div>
+      {% else %}
+        <p class="muted">No content summary has been added yet.</p>
+      {% endif %}
+    </article>
+
+    <article class="card view-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Stakeholders</p>
+          <h2>People and roles</h2>
+        </div>
+      </div>
+      {% if project.people %}
+        <div class="stakeholder-list">
+          {% for person in project.people %}
+            <article class="stakeholder-card">
+              <strong>{{ person.name }}</strong>
+              <span>{{ person.role }}</span>
+              <a href="mailto:{{ person.email }}">{{ person.email }}</a>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted">No stakeholders added yet.</p>
+      {% endif %}
+    </article>
+
+    <article class="card view-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Roadblocks</p>
+          <h2>Open issues</h2>
+        </div>
+      </div>
+      {% if blocked_tasks %}
+        <ul class="simple-list roadblock-list">
+          {% for task in blocked_tasks %}
+            <li>
+              <span>{{ task.title }}</span>
+              <span>{{ task.column }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if roadblock_body.strip() %}
+        <div class="markdown-preview view-markdown">{{ roadblock_body | markdownify | safe }}</div>
+      {% elif not blocked_tasks %}
+        <p class="muted">No roadblocks documented right now.</p>
+      {% endif %}
+    </article>
+
+    <article class="card view-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Milestones</p>
+          <h2>Upcoming dates</h2>
+        </div>
+      </div>
+      {% if upcoming_milestones %}
+        <div class="milestone-list">
+          {% for milestone in upcoming_milestones %}
+            <article class="milestone-card">
+              <strong>{{ milestone.title }}</strong>
+              <span>{{ milestone.status.value }}</span>
+              <small>{{ milestone.target_date or "-" }}</small>
+            </article>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted">No milestones have been scheduled yet.</p>
+      {% endif %}
+    </article>
+
+    <article class="card view-panel view-panel-full">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Access dictionary</p>
+          <h2>Relevant links</h2>
+        </div>
+      </div>
+      <div class="access-view-grid">
+        {% for category in project.access_links %}
+          <section class="access-view-card">
+            <h3>{{ category.name }}</h3>
+            {% if category.links %}
+              <ul class="access-link-list">
+                {% for link in category.links %}
+                  <li>
+                    <a href="{{ link.url }}" target="_blank" rel="noreferrer">{{ link.label }}</a>
+                    {% if link.notes %}<small>{{ link.notes }}</small>{% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            {% else %}
+              <p class="muted">No links yet.</p>
+            {% endif %}
+          </section>
+        {% endfor %}
+      </div>
+    </article>
+  </section>
+</section>

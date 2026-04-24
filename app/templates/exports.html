@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}Exports | ProjStatus{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">Export center</p>
+      <h1>Generate batch-ready project reports</h1>
+      <p class="hero-copy">Create standalone HTML, PNG snapshots, and PowerPoint summary decks from your local project files.</p>
+    </div>
+  </section>
+
+  <section class="grid-two">
+    <form class="card form-grid" method="post" action="{{ request.url_for('exports_run') }}">
+      <div class="full-span">
+        <h2>Projects</h2>
+        <div class="check-grid">
+          {% for project in projects %}
+            <label class="check-card">
+              <input type="checkbox" name="project_slugs" value="{{ project.slug }}" {% if project.slug in selected_projects %}checked{% endif %}>
+              <span>{{ project.name }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="full-span">
+        <h2>Formats</h2>
+        <div class="check-grid">
+          {% for value, label in [('html', 'Standalone HTML'), ('png', 'PNG image'), ('pptx', 'PowerPoint deck')] %}
+            <label class="check-card">
+              <input type="checkbox" name="formats" value="{{ value }}" {% if selected_formats is defined and value in selected_formats %}checked{% endif %}>
+              <span>{{ label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="full-span">
+        <button class="button button-primary" type="submit">Run export</button>
+      </div>
+    </form>
+
+    <article class="card">
+      <h2>Latest results</h2>
+      {% if batch_dir %}
+        <p><strong>Output folder:</strong> {{ batch_dir }}</p>
+      {% endif %}
+      {% if results %}
+        <ul class="result-list">
+          {% for result in results %}
+            <li class="{% if result.success %}success{% else %}error{% endif %}">
+              <strong>{{ result.format.value|upper }}</strong>
+              <span>{{ result.output_path }}</span>
+              <p>{{ result.message or ('Created successfully' if result.success else 'Export failed') }}</p>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">Run an export to see generated files here.</p>
+      {% endif %}
+    </article>
+  </section>
+{% endblock %}

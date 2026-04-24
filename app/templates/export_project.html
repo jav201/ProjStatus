@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ project.name }} | ProjStatus Export</title>
+  <style>
+    :root {
+      --bg: #eef4fb;
+      --bg-deep: #dbeafe;
+      --surface: rgba(255, 255, 255, 0.86);
+      --surface-strong: rgba(255, 255, 255, 0.97);
+      --ink: #0f172a;
+      --muted: #5b708b;
+      --line: rgba(39, 62, 93, 0.1);
+      --accent: #007acc;
+      --accent-strong: #005fb8;
+      --accent-soft: rgba(0, 122, 204, 0.12);
+      --accent-soft-strong: rgba(55, 148, 255, 0.16);
+      --success: #2aa198;
+      --success-soft: rgba(42, 161, 152, 0.16);
+      --warning: #c17d00;
+      --warning-soft: rgba(193, 125, 0, 0.14);
+      --danger: #d64550;
+      --danger-soft: rgba(214, 69, 80, 0.14);
+      --shadow: 0 26px 56px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 2rem;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(55, 148, 255, 0.22), transparent 32%),
+        radial-gradient(circle at top right, rgba(0, 122, 204, 0.12), transparent 28%),
+        linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+      font-family: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+    }
+
+    h1,
+    h2,
+    h3 {
+      margin: 0;
+      font-family: "Aptos Display", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+      letter-spacing: -0.02em;
+    }
+
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .export-shell {
+      max-width: 1560px;
+      margin: 0 auto;
+      display: grid;
+      gap: 1.35rem;
+    }
+
+    .export-hero,
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      overflow: hidden;
+    }
+
+    .export-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.8fr);
+      gap: 1rem;
+      padding: 1.7rem;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(241, 247, 255, 0.92)),
+        radial-gradient(circle at top left, rgba(55, 148, 255, 0.16), transparent 30%);
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      margin-top: 1rem;
+    }
+
+    .hero-chip,
+    .legend-chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.42rem 0.8rem;
+      border-radius: 999px;
+      border: 1px solid rgba(39, 62, 93, 0.08);
+      background: rgba(255, 255, 255, 0.72);
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+
+    .hero-chip strong {
+      margin-left: 0.35rem;
+    }
+
+    .eyebrow,
+    .muted {
+      color: var(--muted);
+    }
+
+    .eyebrow {
+      margin: 0 0 0.45rem;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+
+    .hero-copy {
+      max-width: 66ch;
+      margin: 0.85rem 0 0;
+      line-height: 1.6;
+    }
+
+    .hero-summary {
+      display: grid;
+      gap: 0.9rem;
+      align-content: start;
+    }
+
+    .hero-summary-card {
+      padding: 1rem 1.05rem;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.78);
+    }
+
+    .hero-summary-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .hero-summary-card strong {
+      display: block;
+      margin-top: 0.25rem;
+      font-size: 1.8rem;
+    }
+
+    .view-mode-shell,
+    .view-mode-grid,
+    .view-kpi-grid,
+    .access-view-grid,
+    .stakeholder-list,
+    .milestone-list {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .view-kpi-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .view-kpi-card {
+      padding: 1.05rem 1.1rem;
+      border-radius: 24px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.76);
+    }
+
+    .view-kpi-card span,
+    .view-kpi-card small {
+      color: var(--muted);
+    }
+
+    .view-kpi-card strong {
+      display: block;
+      margin: 0.35rem 0 0.2rem;
+      font-size: 2rem;
+    }
+
+    .view-kpi-card.danger {
+      background: var(--danger-soft);
+    }
+
+    .view-timeline-panel,
+    .view-panel {
+      padding: 1.35rem;
+    }
+
+    .section-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+
+    .view-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .legend-planned { background: rgba(0, 122, 204, 0.1); }
+    .legend-active { background: var(--accent-soft-strong); }
+    .legend-done { background: var(--success-soft); }
+    .legend-blocked { background: var(--danger-soft); }
+    .legend-milestone { background: rgba(0, 95, 184, 0.14); }
+
+    .mermaid-shell {
+      overflow-x: auto;
+      padding: 0.8rem;
+      border-radius: 24px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(246, 250, 255, 0.9)),
+        radial-gradient(circle at top, rgba(55, 148, 255, 0.1), transparent 26%);
+      border: 1px solid rgba(39, 62, 93, 0.08);
+    }
+
+    .mermaid {
+      min-height: 360px;
+      margin: 0;
+    }
+
+    .mermaid svg {
+      min-width: 100%;
+      max-width: none;
+      height: auto;
+    }
+
+    .mermaid svg .taskText,
+    .mermaid svg .taskTextOutsideRight,
+    .mermaid svg .taskTextOutsideLeft,
+    .mermaid svg .sectionTitle,
+    .mermaid svg .titleText {
+      fill: var(--ink);
+      font-family: "Aptos", "Segoe UI Variable Text", "Segoe UI", sans-serif;
+    }
+
+    .mermaid svg .todayMarker {
+      stroke: var(--accent);
+      stroke-width: 2px;
+    }
+
+    .view-mode-grid {
+      grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.8fr);
+    }
+
+    .view-panel-wide,
+    .view-panel-full {
+      grid-column: 1 / -1;
+    }
+
+    .markdown-preview {
+      padding: 1.1rem 1.15rem;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.68);
+      line-height: 1.72;
+    }
+
+    .stakeholder-list,
+    .milestone-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .stakeholder-card,
+    .milestone-card,
+    .access-view-card {
+      display: grid;
+      gap: 0.35rem;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .stakeholder-card a,
+    .access-link-list a {
+      color: var(--accent-strong);
+    }
+
+    .simple-list,
+    .access-link-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: grid;
+      gap: 0.7rem;
+    }
+
+    .roadblock-list li,
+    .access-link-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 0.8rem 0.95rem;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .access-view-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .export-footer {
+      padding: 0 0.25rem;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 1120px) {
+      .export-hero,
+      .view-mode-grid,
+      .view-kpi-grid,
+      .access-view-grid,
+      .stakeholder-list,
+      .milestone-list {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      body {
+        padding: 1rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="export-shell">
+    <section class="export-hero">
+      <div>
+        <p class="eyebrow">{{ project.health.value }} &middot; {{ project.status.value }}</p>
+        <h1>{{ project.name }}</h1>
+        <p class="hero-copy">{{ project.description or "No description yet." }}</p>
+        <div class="hero-meta">
+          <span class="hero-chip">Timeline <strong>{{ project.start_date or "-" }} to {{ project.end_date or "-" }}</strong></span>
+          <span class="hero-chip">Tasks <strong>{{ project.tasks|length }}</strong></span>
+          <span class="hero-chip">Milestones <strong>{{ project.milestones|length }}</strong></span>
+          <span class="hero-chip">Blocked <strong>{{ blocked_tasks|length }}</strong></span>
+        </div>
+      </div>
+      <div class="hero-summary">
+        <article class="hero-summary-card">
+          <span>Primary stakeholders</span>
+          <strong>{{ project.people|length }}</strong>
+        </article>
+        <article class="hero-summary-card">
+          <span>Next milestone</span>
+          <strong>{{ upcoming_milestones[0].target_date if upcoming_milestones else "-" }}</strong>
+        </article>
+      </div>
+    </section>
+
+    {% include "partials/project_view_mode.html" %}
+
+    <p class="export-footer">Generated from local project files with ProjStatus.</p>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      securityLevel: "loose",
+      theme: "base",
+      fontFamily: "Aptos, Segoe UI Variable Text, Segoe UI, sans-serif",
+      themeVariables: {
+        fontFamily: "Aptos, Segoe UI Variable Text, Segoe UI, sans-serif",
+        primaryColor: "#E6F2FF",
+        primaryTextColor: "#0F172A",
+        primaryBorderColor: "#007ACC",
+        lineColor: "#8AA8C7",
+        textColor: "#0F172A",
+        taskTextColor: "#0F172A",
+        taskTextLightColor: "#0F172A",
+        taskBkgColor: "#D9EAFF",
+        taskBorderColor: "#7CA9D8",
+        activeTaskBkgColor: "#3794FF",
+        activeTaskBorderColor: "#007ACC",
+        doneTaskBkgColor: "#8FD3C8",
+        doneTaskBorderColor: "#2AA198",
+        critTaskBkgColor: "#FFCCD1",
+        critTaskBorderColor: "#D64550",
+        gridColor: "#D5E2F0",
+        sectionBkgColor: "#F8FBFF",
+        sectionBkgColor2: "#EEF5FF",
+        sectionColor: "#0F172A",
+        todayLineColor: "#007ACC"
+      },
+      gantt: {
+        barHeight: 28,
+        barGap: 10,
+        topPadding: 50,
+        leftPadding: 110,
+        rightPadding: 32
+      }
+    });
+  </script>
+</body>
+</html>
