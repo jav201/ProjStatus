@@ -1,41 +1,9 @@
-const MERMAID_CONFIG = {
-  startOnLoad: false,
-  securityLevel: "loose",
-  theme: "base",
-  fontFamily: "Aptos, Segoe UI Variable Text, Segoe UI, sans-serif",
-  themeVariables: {
-    fontFamily: "Aptos, Segoe UI Variable Text, Segoe UI, sans-serif",
-    primaryColor: "#E6F2FF",
-    primaryTextColor: "#0F172A",
-    primaryBorderColor: "#007ACC",
-    lineColor: "#8AA8C7",
-    textColor: "#0F172A",
-    taskTextColor: "#0F172A",
-    taskTextLightColor: "#0F172A",
-    taskBkgColor: "#D9EAFF",
-    taskBorderColor: "#7CA9D8",
-    activeTaskBkgColor: "#3794FF",
-    activeTaskBorderColor: "#007ACC",
-    doneTaskBkgColor: "#8FD3C8",
-    doneTaskBorderColor: "#2AA198",
-    critTaskBkgColor: "#FFCCD1",
-    critTaskBorderColor: "#D64550",
-    gridColor: "#D5E2F0",
-    sectionBkgColor: "#F8FBFF",
-    sectionBkgColor2: "#EEF5FF",
-    sectionColor: "#0F172A",
-    todayLineColor: "#007ACC",
-  },
-  gantt: {
-    barHeight: 28,
-    barGap: 10,
-    topPadding: 50,
-    leftPadding: 110,
-    rightPadding: 32,
-  },
-};
+const THEME_STORAGE_KEY = "projstatus-theme";
 
 document.addEventListener("DOMContentLoaded", () => {
+  applyTheme(resolveTheme());
+  bindThemeToggle();
+  bindSystemThemeSync();
   initializeMermaid();
   initializeBoard();
   initializeMermaidEditor();
@@ -46,12 +14,123 @@ document.body.addEventListener("htmx:afterSwap", () => {
   initializeMermaidEditor();
 });
 
-function initializeMermaid() {
+function bindThemeToggle() {
+  const toggle = document.querySelector("[data-theme-toggle]");
+  if (!toggle) {
+    return;
+  }
+
+  updateThemeLabel(resolveTheme());
+  toggle.addEventListener("click", async () => {
+    const current = resolveTheme();
+    const next = current === "dark" ? "light" : "dark";
+    setStoredTheme(next);
+    applyTheme(next);
+    await initializeMermaid();
+  });
+}
+
+function bindSystemThemeSync() {
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+  const handleChange = async () => {
+    if (getStoredTheme()) {
+      return;
+    }
+    applyTheme(resolveTheme());
+    await initializeMermaid();
+  };
+
+  if (typeof mediaQuery.addEventListener === "function") {
+    mediaQuery.addEventListener("change", handleChange);
+  } else if (typeof mediaQuery.addListener === "function") {
+    mediaQuery.addListener(handleChange);
+  }
+}
+
+function getStoredTheme() {
+  try {
+    const value = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return value === "light" || value === "dark" ? value : "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function setStoredTheme(theme) {
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch (error) {
+    console.warn("Unable to persist theme preference", error);
+  }
+}
+
+function resolveTheme() {
+  const storedTheme = getStoredTheme();
+  if (storedTheme) {
+    return storedTheme;
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  updateThemeLabel(theme);
+}
+
+function updateThemeLabel(theme) {
+  const label = document.querySelector("[data-theme-label]");
+  if (!label) {
+    return;
+  }
+  label.textContent = theme === "dark" ? "Light mode" : "Dark mode";
+}
+
+function getMermaidConfig(theme) {
+  const dark = theme === "dark";
+  return {
+    startOnLoad: false,
+    securityLevel: "loose",
+    theme: "base",
+    fontFamily: "Segoe UI Variable Text, Aptos, Segoe UI, sans-serif",
+    themeVariables: {
+      fontFamily: "Segoe UI Variable Text, Aptos, Segoe UI, sans-serif",
+      primaryColor: dark ? "#112540" : "#E6F2FF",
+      primaryTextColor: dark ? "#E8F1FF" : "#0F172A",
+      primaryBorderColor: dark ? "#3794FF" : "#007ACC",
+      lineColor: dark ? "#5C7FA8" : "#8AA8C7",
+      textColor: dark ? "#E8F1FF" : "#0F172A",
+      taskTextColor: dark ? "#E8F1FF" : "#0F172A",
+      taskTextLightColor: dark ? "#E8F1FF" : "#0F172A",
+      taskBkgColor: dark ? "#18375A" : "#D9EAFF",
+      taskBorderColor: dark ? "#5B88B7" : "#7CA9D8",
+      activeTaskBkgColor: dark ? "#3794FF" : "#3794FF",
+      activeTaskBorderColor: dark ? "#6CB6FF" : "#007ACC",
+      doneTaskBkgColor: dark ? "#1F6F6B" : "#8FD3C8",
+      doneTaskBorderColor: dark ? "#36C3B4" : "#2AA198",
+      critTaskBkgColor: dark ? "#4A2230" : "#FFCCD1",
+      critTaskBorderColor: dark ? "#FF6B7A" : "#D64550",
+      gridColor: dark ? "#294665" : "#D5E2F0",
+      sectionBkgColor: dark ? "#0F1D33" : "#F8FBFF",
+      sectionBkgColor2: dark ? "#12253F" : "#EEF5FF",
+      sectionColor: dark ? "#E8F1FF" : "#0F172A",
+      todayLineColor: dark ? "#6CB6FF" : "#007ACC",
+    },
+    gantt: {
+      barHeight: 28,
+      barGap: 10,
+      topPadding: 50,
+      leftPadding: 110,
+      rightPadding: 32,
+    },
+  };
+}
+
+async function initializeMermaid() {
   if (typeof mermaid === "undefined") {
     return;
   }
-  mermaid.initialize(MERMAID_CONFIG);
-  renderMermaidNodes(Array.from(document.querySelectorAll(".mermaid")));
+  mermaid.initialize(getMermaidConfig(resolveTheme()));
+  await renderMermaidNodes(Array.from(document.querySelectorAll(".mermaid")));
 }
 
 async function renderMermaidNodes(nodes) {
@@ -60,6 +139,9 @@ async function renderMermaidNodes(nodes) {
   }
 
   for (const node of nodes) {
+    const definition = node.dataset.graphDefinition || node.textContent;
+    node.dataset.graphDefinition = definition;
+    node.textContent = definition;
     node.removeAttribute("data-processed");
   }
 
@@ -120,6 +202,7 @@ function initializeMermaidEditor() {
   editor.dataset.previewBound = "true";
 
   const renderPreview = async () => {
+    preview.dataset.graphDefinition = editor.value;
     preview.textContent = editor.value;
     await renderMermaidNodes([preview]);
   };

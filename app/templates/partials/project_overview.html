@@ -10,6 +10,11 @@
         Description
         <textarea name="description" rows="4">{{ project.description }}</textarea>
       </label>
+      <label class="full-span">
+        Logo path
+        <input type="text" name="logo_path" value="{{ project.logo_path or '' }}" placeholder="assets/logo.png">
+        <small class="field-hint">Use a path relative to this project's folder. If the file is missing, ProjStatus shows a placeholder tile.</small>
+      </label>
       <label>
         Health
         <select name="health">
@@ -78,6 +83,60 @@
     {% else %}
       <p class="muted">No milestones yet.</p>
     {% endif %}
+
+    <div class="section-divider"></div>
+
+    <h3>Project actions</h3>
+    <div class="stack compact">
+      {% if project.archived %}
+        <form class="form-grid" method="post" action="{{ request.url_for('project_unarchive', slug=project.slug) }}">
+          <input type="hidden" name="return_to" value="{{ request.url_for('project_overview', slug=project.slug) }}">
+          <label class="full-span">
+            Addendum note
+            <input type="text" name="change_note" placeholder="Why are you bringing it back?">
+          </label>
+          <div class="full-span">
+            <button class="button" type="submit">Unarchive project</button>
+          </div>
+        </form>
+      {% else %}
+        <form class="form-grid" method="post" action="{{ request.url_for('project_archive', slug=project.slug) }}">
+          <input type="hidden" name="return_to" value="{{ request.url_for('project_overview', slug=project.slug) }}">
+          <label class="full-span">
+            Addendum note
+            <input type="text" name="change_note" placeholder="Why are you archiving it?">
+          </label>
+          <div class="full-span">
+            <button class="button" type="submit">Archive project</button>
+          </div>
+        </form>
+      {% endif %}
+
+      <form class="form-grid" method="post" action="{{ request.url_for('project_duplicate', slug=project.slug) }}">
+        <label class="full-span">
+          Duplicate as
+          <input type="text" name="new_name" placeholder="{{ project.name }} Copy">
+        </label>
+        <label class="full-span">
+          Addendum note
+          <input type="text" name="change_note" placeholder="Why make this copy?">
+        </label>
+        <div class="full-span">
+          <button class="button button-subtle" type="submit">Duplicate project</button>
+        </div>
+      </form>
+
+      <form class="form-grid danger-zone" method="post" action="{{ request.url_for('project_delete', slug=project.slug) }}">
+        <label class="full-span">
+          Confirm permanent delete
+          <input type="text" name="confirm_name" placeholder="{{ project.name }}">
+        </label>
+        <p class="muted full-span">This deletes the project folder, history, markdown files, and timeline from the local workspace.</p>
+        <div class="full-span">
+          <button class="button button-danger" type="submit">Delete project permanently</button>
+        </div>
+      </form>
+    </div>
   </article>
 </section>
 

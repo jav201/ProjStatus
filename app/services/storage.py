@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import date, datetime
 from pathlib import Path
 
@@ -17,6 +18,8 @@ from app.models import (
     ProjectSnapshot,
     SectionName,
     SyncHealth,
+    SyncState,
+    make_id,
 )
 from app.services.history import build_addendum, render_addendum_markdown
 from app.services.mermaid import import_timeline, render_timeline
@@ -32,50 +35,37 @@ class StorageService:
         self.config.projects_dir.mkdir(parents=True, exist_ok=True)
         self.config.exports_dir.mkdir(parents=True, exist_ok=True)
 
-    def list_dashboard_projects(self, search: str = "", health: str = "") -> list[DashboardProject]:
+    def list_dashboard_projects(
+        self,
+        search: str = "",
+        health: str = "",
+        sort_by: str = "recent_update",
+        include_archived: bool = False,
+    ) -> list[DashboardProject]:
         results: list[DashboardProject] = []
         for project_dir in sorted(self.config.projects_dir.glob("*")):
             if not project_dir.is_dir():
                 continue
             loaded = self.load_project(project_dir.name)
-            project = loaded.project
-            next_milestone = next(
-                (
-                    milestone
-                    for milestone in sorted(
-                        [item for item in project.milestones if item.target_date],
-                        key=lambda item: item.target_date or date.max,
-                    )
-                    if milestone.status != "complete"
-                ),
-                None,
-            )
-            roadblock_count = sum(1 for task in project.tasks if task.blocked or task.column == "Blocked")
-            recent_at = loaded.addendums[0].created_at if loaded.addendums else None
-            entry = DashboardProject(
-                slug=project.slug,
-                name=project.name,
-                health=project.health,
-                status=project.status,
-                start_date=project.start_date,
-                end_date=project.end_date,
-                owner_names=[person.name for person in project.people[:3]],
-                next_milestone=next_milestone,
-                roadblock_count=roadblock_count,
-                recent_addendum_at=recent_at,
-            )
-            if search and search.lower() not in entry.name.lower():
+            entry = self._dashboard_entry(loaded)
+            if entry.archived and not include_archived:
+                continue
+            if search and search.lower() not in self._search_blob(loaded.project):
                 continue
             if health and entry.health.value != health:
                 continue
             results.append(entry)
-        return results
+        return self._sort_dashboard_projects(results, sort_by)
 
-    def list_recent_addendums(self, limit: int = 10) -> list[tuple[str, Addendum]]:
+    def list_recent_addendums(self, limit: int = 10, include_archived: bool = False) -> list[tuple[str, Addendum]]:
         items: list[tuple[str, Addendum]] = []
         for project_dir in self.config.projects_dir.glob("*"):
             if not project_dir.is_dir():
                 continue
+            if not include_archived:
+                loaded = self.load_project(project_dir.name)
+                if loaded.project.archived:
+                    continue
             for addendum in self._read_history(project_dir)[:limit]:
                 items.append((project_dir.name, addendum))
         items.sort(key=lambda item: item[1].created_at, reverse=True)
@@ -96,11 +86,67 @@ class StorageService:
         self.save_project(project, sections, note="Project created", actor="web")
         return project
 
+    def archive_project(self, slug: str, note: str = "") -> Addendum:
+        loaded = self.load_project(slug)
+        loaded.project.archived = True
+        loaded.project.archived_at = datetime.now()
+        return self.save_project(
+            loaded.project,
+            loaded.sections,
+            note=note.strip() or f"Archived project '{loaded.project.name}'",
+            preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+        )
+
+    def unarchive_project(self, slug: str, note: str = "") -> Addendum:
+        loaded = self.load_project(slug)
+        loaded.project.archived = False
+        loaded.project.archived_at = None
+        return self.save_project(
+            loaded.project,
+            loaded.sections,
+            note=note.strip() or f"Unarchived project '{loaded.project.name}'",
+            preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+        )
+
+    def delete_project(self, slug: str) -> None:
+        project_dir = self._project_dir(slug).resolve()
+        projects_root = self.config.projects_dir.resolve()
+        if not project_dir.exists():
+            raise FileNotFoundError(slug)
+        if project_dir.parent != projects_root:
+            raise ValueError("Refusing to delete outside the projects directory.")
+        shutil.rmtree(project_dir)
+
+    def duplicate_project(self, slug: str, new_name: str, note: str = "") -> Project:
+        loaded = self.load_project(slug)
+        clean_name = new_name.strip() or f"{loaded.project.name} Copy"
+        duplicated = loaded.project.model_copy(deep=True)
+        duplicated.id = make_id("project")
+        duplicated.slug = self._unique_slug(slugify(clean_name))
+        duplicated.name = clean_name
+        duplicated.archived = False
+        duplicated.archived_at = None
+        duplicated.sync_state = SyncState()
+
+        self._copy_logo_asset(loaded.project, duplicated)
+        self.save_project(
+            duplicated,
+            loaded.sections.copy(),
+            note=note.strip() or f"Duplicated from '{loaded.project.name}'",
+            actor="duplicate",
+            timeline_text=render_timeline(duplicated),
+        )
+        return duplicated
+
     def load_project(self, slug: str) -> ProjectLoadResult:
         project_dir = self._project_dir(slug)
+        if not project_dir.exists():
+            raise FileNotFoundError(slug)
         project_path = project_dir / "project.json"
         raw_json = project_path.read_text(encoding="utf-8") if project_path.exists() else ""
         fallback_snapshot = self._latest_snapshot(project_dir)
+        if not raw_json and fallback_snapshot is None:
+            raise FileNotFoundError(slug)
         validation_errors: list[str] = []
 
         try:
@@ -221,6 +267,20 @@ class StorageService:
             timeline_text=addendum.snapshot.timeline_text,
         )
 
+    def resolve_logo_file(self, project: Project) -> Path | None:
+        if not project.logo_path:
+            return None
+        asset_path = Path(project.logo_path)
+        if asset_path.is_absolute():
+            return None
+        project_dir = self._project_dir(project.slug).resolve()
+        candidate = (project_dir / asset_path).resolve()
+        if candidate.parent != project_dir and project_dir not in candidate.parents:
+            return None
+        if not candidate.exists() or not candidate.is_file():
+            return None
+        return candidate
+
     def _project_dir(self, slug: str) -> Path:
         return self.config.projects_dir / slug
 
@@ -264,3 +324,74 @@ class StorageService:
         project_copy = project.model_copy(deep=True)
         project_copy.sync_state.project_hash = ""
         return sha1_text(dumps_pretty(project_copy.model_dump(mode="json")))
+
+    def _dashboard_entry(self, loaded: ProjectLoadResult) -> DashboardProject:
+        project = loaded.project
+        next_milestone = next(
+            (
+                milestone
+                for milestone in sorted(
+                    [item for item in project.milestones if item.target_date],
+                    key=lambda item: item.target_date or date.max,
+                )
+                if milestone.status != "complete"
+            ),
+            None,
+        )
+        roadblock_count = sum(1 for task in project.tasks if task.blocked or task.column == "Blocked")
+        recent_at = loaded.addendums[0].created_at if loaded.addendums else None
+        return DashboardProject(
+            slug=project.slug,
+            name=project.name,
+            description=project.description,
+            logo_path=project.logo_path,
+            has_logo=self.resolve_logo_file(project) is not None,
+            health=project.health,
+            status=project.status,
+            start_date=project.start_date,
+            end_date=project.end_date,
+            archived=project.archived,
+            owner_names=[person.name for person in project.people[:3]],
+            next_milestone=next_milestone,
+            roadblock_count=roadblock_count,
+            recent_addendum_at=recent_at,
+        )
+
+    def _search_blob(self, project: Project) -> str:
+        parts = [project.name, project.description]
+        for person in project.people:
+            parts.extend([person.name, person.email, person.role])
+        return " ".join(part.lower() for part in parts if part)
+
+    def _sort_dashboard_projects(self, projects: list[DashboardProject], sort_by: str) -> list[DashboardProject]:
+        items = list(projects)
+        if sort_by == "name":
+            items.sort(key=lambda item: item.name.lower())
+            return items
+        if sort_by == "end_date":
+            items.sort(key=lambda item: (item.end_date is None, item.end_date or date.max, item.name.lower()))
+            return items
+        if sort_by == "next_milestone":
+            items.sort(
+                key=lambda item: (
+                    item.next_milestone is None,
+                    item.next_milestone.target_date if item.next_milestone and item.next_milestone.target_date else date.max,
+                    item.name.lower(),
+                )
+            )
+            return items
+        items.sort(key=lambda item: item.name.lower())
+        items.sort(key=lambda item: item.recent_addendum_at or datetime.min, reverse=True)
+        return items
+
+    def _copy_logo_asset(self, source: Project, target: Project) -> None:
+        if not source.logo_path:
+            target.logo_path = None
+            return
+        target.logo_path = source.logo_path
+        source_logo = self.resolve_logo_file(source)
+        if source_logo is None:
+            return
+        target_path = self._project_dir(target.slug) / source.logo_path
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_logo, target_path)

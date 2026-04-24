@@ -4,13 +4,32 @@
 
 {% block content %}
   <section class="project-hero card">
-    <div class="project-hero-copy">
-      <p class="eyebrow">{{ project.health.value }} &middot; {{ project.status.value }}</p>
-      <h1>{{ project.name }}</h1>
-      <p class="hero-copy">{{ project.description or "No description yet." }}</p>
+    <div class="project-hero-main">
+      <div class="logo-frame logo-frame-hero">
+        {% if project_logo_url %}
+          <img src="{{ project_logo_url }}" alt="{{ project.name }} logo">
+        {% else %}
+          <span>{{ project.name[:2].upper() }}</span>
+        {% endif %}
+      </div>
+      <div class="project-hero-copy">
+        <div class="project-card-title-row">
+          <p class="eyebrow">{{ project.health.value }} &middot; {{ project.status.value }}</p>
+          {% if project.archived %}
+            <span class="pill pill-muted">Archived</span>
+          {% endif %}
+        </div>
+        <h1>{{ project.name }}</h1>
+        <p class="hero-copy">{{ project.description or "No description yet." }}</p>
+      </div>
     </div>
     <div class="hero-actions">
-      <span>{{ project.start_date or "-" }} to {{ project.end_date or "-" }}</span>
+      <div class="hero-meta">
+        <span class="hero-chip">Timeline <strong>{{ project.start_date or "-" }} to {{ project.end_date or "-" }}</strong></span>
+        {% if project.logo_path %}
+          <span class="hero-chip">Logo path <strong>{{ project.logo_path }}</strong></span>
+        {% endif %}
+      </div>
       <div class="button-cluster">
         <a class="button button-subtle" href="{{ request.url_for('project_view', slug=project.slug) }}">View mode</a>
         <a class="button button-primary" href="{{ request.url_for('exports') }}?project={{ project.slug }}">Export</a>
@@ -18,8 +37,11 @@
     </div>
   </section>
 
-  {% if sync_notice or validation_errors or import_summary %}
+  {% if project.archived or sync_notice or validation_errors or import_summary %}
     <section class="card alert-stack">
+      {% if project.archived %}
+        <p class="alert-line warning">This project is archived and hidden from the default dashboard until you enable archived items or unarchive it.</p>
+      {% endif %}
       {% if sync_notice %}
         <p class="alert-line warning">Sync notice: {{ sync_notice }}</p>
       {% endif %}
