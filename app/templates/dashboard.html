@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | ProjStatus{% endblock %}
+
+{% block content %}
+  <section class="hero-panel">
+    <div>
+      <p class="eyebrow">Portfolio dashboard</p>
+      <h1>See every project, risk, and milestone from one local workspace.</h1>
+      <p class="hero-copy">Your data stays in files. The app layers board editing, markdown, Mermaid, history, and exports on top.</p>
+    </div>
+    <a class="button button-primary" href="{{ request.url_for('project_new') }}">Create project</a>
+  </section>
+
+  <form class="filters card" method="get" action="{{ request.url_for('dashboard') }}">
+    <label>
+      Search
+      <input type="search" name="search" value="{{ search }}" placeholder="Find a project">
+    </label>
+    <label>
+      Health
+      <select name="health">
+        <option value="">All</option>
+        <option value="on-track" {% if health == 'on-track' %}selected{% endif %}>On Track</option>
+        <option value="at-risk" {% if health == 'at-risk' %}selected{% endif %}>At Risk</option>
+        <option value="blocked" {% if health == 'blocked' %}selected{% endif %}>Blocked</option>
+        <option value="complete" {% if health == 'complete' %}selected{% endif %}>Complete</option>
+      </select>
+    </label>
+    <button class="button" type="submit">Apply</button>
+  </form>
+
+  <section class="stats-grid">
+    <article class="stat-card">
+      <span>On Track</span>
+      <strong>{{ summary_cards.on_track }}</strong>
+    </article>
+    <article class="stat-card warning">
+      <span>At Risk</span>
+      <strong>{{ summary_cards.at_risk }}</strong>
+    </article>
+    <article class="stat-card danger">
+      <span>Blocked</span>
+      <strong>{{ summary_cards.blocked }}</strong>
+    </article>
+    <article class="stat-card">
+      <span>Due Soon</span>
+      <strong>{{ summary_cards.due_soon }}</strong>
+    </article>
+  </section>
+
+  <section class="dashboard-grid">
+    <div class="stack">
+      {% if projects %}
+        {% for project in projects %}
+          <article class="card project-card">
+            <div class="project-card-header">
+              <div>
+                <p class="eyebrow">{{ project.health.value }}</p>
+                <h2><a href="{{ request.url_for('project_overview', slug=project.slug) }}">{{ project.name }}</a></h2>
+              </div>
+              <div class="button-cluster">
+                <a class="button button-subtle" href="{{ request.url_for('project_view', slug=project.slug) }}">View mode</a>
+                <a class="button button-subtle" href="{{ request.url_for('project_board', slug=project.slug) }}">Open board</a>
+              </div>
+            </div>
+            <dl class="project-meta-grid">
+              <div><dt>Status</dt><dd>{{ project.status.value }}</dd></div>
+              <div><dt>Dates</dt><dd>{{ project.start_date or "-" }} to {{ project.end_date or "-" }}</dd></div>
+              <div><dt>Owners</dt><dd>{{ project.owner_names|join(", ") if project.owner_names else "None yet" }}</dd></div>
+              <div><dt>Roadblocks</dt><dd>{{ project.roadblock_count }}</dd></div>
+              <div><dt>Next milestone</dt><dd>{{ project.next_milestone.title if project.next_milestone else "No milestone" }}</dd></div>
+              <div><dt>Recent change</dt><dd>{{ project.recent_addendum_at or "-" }}</dd></div>
+            </dl>
+          </article>
+        {% endfor %}
+      {% else %}
+        <article class="card empty-state">
+          <h2>No projects yet</h2>
+          <p>Create your first project to start tracking tasks, milestones, files, and exports.</p>
+          <a class="button button-primary" href="{{ request.url_for('project_new') }}">Create project</a>
+        </article>
+      {% endif %}
+    </div>
+
+    <aside class="stack">
+      <section class="card">
+        <h2>Upcoming milestones</h2>
+        {% if upcoming_milestones %}
+          <ul class="simple-list">
+            {% for slug, milestone in upcoming_milestones %}
+              <li>
+                <a href="{{ request.url_for('project_overview', slug=slug) }}">{{ milestone.title }}</a>
+                <span>{{ milestone.target_date }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">No upcoming milestones yet.</p>
+        {% endif %}
+      </section>
+
+      <section class="card">
+        <h2>Blocked tasks</h2>
+        {% if blocked_tasks %}
+          <ul class="simple-list">
+            {% for slug, task in blocked_tasks %}
+              <li>
+                <a href="{{ request.url_for('project_board', slug=slug) }}">{{ task.title }}</a>
+                <span>{{ slug }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">No blocked tasks.</p>
+        {% endif %}
+      </section>
+
+      <section class="card">
+        <h2>Recent addendums</h2>
+        {% if recent_addendums %}
+          <ul class="simple-list">
+            {% for slug, addendum in recent_addendums %}
+              <li>
+                <a href="{{ request.url_for('project_history', slug=slug) }}?entry={{ addendum.id }}">{{ addendum.summary[0] }}</a>
+                <span>{{ addendum.created_at }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">History will appear here after the first save.</p>
+        {% endif %}
+      </section>
+    </aside>
+  </section>
+{% endblock %}

@@ -1,0 +1,159 @@
+<section class="grid-two">
+  <article class="card">
+    <h2>Project details</h2>
+    <form class="form-grid" method="post" action="{{ request.url_for('project_meta_update', slug=project.slug) }}">
+      <label class="full-span">
+        Name
+        <input type="text" name="name" value="{{ project.name }}" required>
+      </label>
+      <label class="full-span">
+        Description
+        <textarea name="description" rows="4">{{ project.description }}</textarea>
+      </label>
+      <label>
+        Health
+        <select name="health">
+          {% for value in ['on-track', 'at-risk', 'blocked', 'complete'] %}
+            <option value="{{ value }}" {% if project.health.value == value %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Status
+        <select name="status">
+          {% for value in ['active', 'planned', 'hold', 'complete'] %}
+            <option value="{{ value }}" {% if project.status.value == value %}selected{% endif %}>{{ value }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Start date
+        <input type="date" name="start_date" value="{{ format_date(project.start_date) }}">
+      </label>
+      <label>
+        End date
+        <input type="date" name="end_date" value="{{ format_date(project.end_date) }}">
+      </label>
+      <label class="full-span">
+        Addendum note
+        <input type="text" name="change_note" placeholder="Why did this change?">
+      </label>
+      <div class="full-span">
+        <button class="button button-primary" type="submit">Save details</button>
+      </div>
+    </form>
+  </article>
+
+  <article class="card">
+    <h2>Project pulse</h2>
+    <div class="stack compact">
+      <div class="mini-metric">
+        <span>People</span>
+        <strong>{{ project.people|length }}</strong>
+      </div>
+      <div class="mini-metric">
+        <span>Milestones</span>
+        <strong>{{ project.milestones|length }}</strong>
+      </div>
+      <div class="mini-metric">
+        <span>Tasks</span>
+        <strong>{{ project.tasks|length }}</strong>
+      </div>
+      <div class="mini-metric">
+        <span>Blocked</span>
+        <strong>{{ blocked_tasks|length }}</strong>
+      </div>
+    </div>
+
+    <h3>Upcoming milestones</h3>
+    {% if upcoming_milestones %}
+      <ul class="simple-list">
+        {% for milestone in upcoming_milestones[:6] %}
+          <li>
+            <span>{{ milestone.title }}</span>
+            <span>{{ milestone.target_date or "-" }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No milestones yet.</p>
+    {% endif %}
+  </article>
+</section>
+
+<section class="card">
+  <div class="section-heading">
+    <h2>Milestones</h2>
+    <p class="muted">Manage dates, owners, and status directly from the project file model.</p>
+  </div>
+
+  {% if project.milestones %}
+    <div class="table-stack">
+      {% for milestone in project.milestones %}
+        <form class="grid-row grid-row-milestone" method="post" action="{{ request.url_for('milestone_update', slug=project.slug, milestone_id=milestone.id) }}">
+          <input type="text" name="title" value="{{ milestone.title }}" placeholder="Milestone title" required>
+          <select name="owner_person_id">
+            <option value="">No owner</option>
+            {% for person in project.people %}
+              <option value="{{ person.id }}" {% if milestone.owner_person_id == person.id %}selected{% endif %}>{{ person.name }}</option>
+            {% endfor %}
+          </select>
+          <input type="date" name="target_date" value="{{ format_date(milestone.target_date) }}">
+          <select name="status">
+            {% for value in ['planned', 'active', 'blocked', 'complete'] %}
+              <option value="{{ value }}" {% if milestone.status.value == value %}selected{% endif %}>{{ value }}</option>
+            {% endfor %}
+          </select>
+          <input type="text" name="notes" value="{{ milestone.notes }}" placeholder="Notes">
+          <input type="text" name="change_note" placeholder="Addendum note">
+          <button class="button" type="submit">Save</button>
+        </form>
+        <form class="inline-delete" method="post" action="{{ request.url_for('milestone_delete', slug=project.slug, milestone_id=milestone.id) }}">
+          <input type="hidden" name="change_note" value="Removed milestone {{ milestone.title }}">
+          <button class="button button-danger" type="submit">Delete</button>
+        </form>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">No milestones yet.</p>
+  {% endif %}
+
+  <form class="form-grid section-form-top" method="post" action="{{ request.url_for('milestone_create', slug=project.slug) }}">
+    <label>
+      New milestone
+      <input type="text" name="title" required>
+    </label>
+    <label>
+      Owner
+      <select name="owner_person_id">
+        <option value="">No owner</option>
+        {% for person in project.people %}
+          <option value="{{ person.id }}">{{ person.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Target date
+      <input type="date" name="target_date">
+    </label>
+    <label>
+      Status
+      <select name="status">
+        {% for value in ['planned', 'active', 'blocked', 'complete'] %}
+          <option value="{{ value }}">{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Notes
+      <input type="text" name="notes">
+    </label>
+    <label>
+      Addendum note
+      <input type="text" name="change_note">
+    </label>
+    <div>
+      <button class="button button-primary" type="submit">Add milestone</button>
+    </div>
+  </form>
+</section>

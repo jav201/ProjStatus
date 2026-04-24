@@ -1,0 +1,77 @@
+<section class="history-layout">
+  <aside class="card">
+    <h2>Addendums</h2>
+    {% if all_addendums %}
+      <ul class="history-list">
+        {% for addendum in all_addendums %}
+          <li class="{% if selected_addendum and selected_addendum.id == addendum.id %}active{% endif %}">
+            <a href="{{ request.url_for('project_history', slug=project.slug) }}?entry={{ addendum.id }}">
+              <strong>{{ addendum.id }}</strong>
+              <span>{{ addendum.created_at }}</span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">No addendums yet.</p>
+    {% endif %}
+  </aside>
+
+  <article class="card">
+    {% if selected_addendum %}
+      <div class="section-heading">
+        <div>
+          <h2>{{ selected_addendum.id }}</h2>
+          <p class="muted">{{ selected_addendum.created_at }}</p>
+        </div>
+        <form class="inline-actions" method="post" action="{{ request.url_for('history_restore', slug=project.slug, addendum_id=selected_addendum.id) }}">
+          <input type="text" name="change_note" placeholder="Reason for restore">
+          <button class="button button-primary" type="submit">Restore snapshot</button>
+        </form>
+      </div>
+
+      <div class="stack">
+        <section>
+          <h3>Summary</h3>
+          <ul class="simple-list">
+            {% for line in selected_addendum.summary %}
+              <li>{{ line }}</li>
+            {% endfor %}
+          </ul>
+        </section>
+
+        {% if selected_addendum.note %}
+          <section>
+            <h3>Note</h3>
+            <p>{{ selected_addendum.note }}</p>
+          </section>
+        {% endif %}
+
+        <section>
+          <h3>Changed files</h3>
+          {% if selected_addendum.changed_files %}
+            <ul class="simple-list">
+              {% for filename in selected_addendum.changed_files %}
+                <li>{{ filename }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted">No file diffs recorded.</p>
+          {% endif %}
+        </section>
+
+        <section>
+          <h3>Diffs</h3>
+          {% for filename, diff in selected_addendum.diffs.items() %}
+            <h4>{{ filename }}</h4>
+            <pre class="diff-block">{{ diff }}</pre>
+          {% else %}
+            <p class="muted">No diff content recorded.</p>
+          {% endfor %}
+        </section>
+      </div>
+    {% else %}
+      <p class="muted">Select an addendum to inspect it.</p>
+    {% endif %}
+  </article>
+</section>

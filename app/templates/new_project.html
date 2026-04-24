@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}New Project | ProjStatus{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">New project</p>
+      <h1>Create a local-first project workspace</h1>
+      <p class="hero-copy">This creates the project folder, starter markdown files, Mermaid timeline, and the first addendum snapshot.</p>
+    </div>
+  </section>
+
+  <form class="card form-grid" method="post" action="{{ request.url_for('project_create') }}">
+    <label class="full-span">
+      Project name
+      <input type="text" name="name" required>
+    </label>
+    <label class="full-span">
+      Description
+      <textarea name="description" rows="4" placeholder="What is this project about?"></textarea>
+    </label>
+    <label>
+      Start date
+      <input type="date" name="start_date">
+    </label>
+    <label>
+      End date
+      <input type="date" name="end_date">
+    </label>
+    <div class="full-span actions-row">
+      <button class="button button-primary" type="submit">Create project</button>
+      <a class="button button-subtle" href="{{ request.url_for('dashboard') }}">Cancel</a>
+    </div>
+  </form>
+{% endblock %}

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}ProjStatus{% endblock %}</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='/styles.css') }}">
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script defer src="{{ request.url_for('static', path='/app.js') }}"></script>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <a class="brand" href="{{ request.url_for('dashboard') }}">
+        <span class="brand-kicker">Local-first PM</span>
+        <strong>ProjStatus</strong>
+      </a>
+      <nav class="topnav">
+        <a href="{{ request.url_for('dashboard') }}">Dashboard</a>
+        <a href="{{ request.url_for('project_new') }}">New Project</a>
+        <a href="{{ request.url_for('exports') }}">Exports</a>
+      </nav>
+    </header>
+
+    {% if message %}
+      <div class="flash flash-{{ message_level }}">{{ message }}</div>
+    {% endif %}
+
+    <main class="content-shell">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

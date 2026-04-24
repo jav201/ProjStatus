@@ -1,0 +1,41 @@
+<section class="card">
+  <div class="subtabs">
+    {% for item in ['content', 'change_requests', 'roadblocks', 'notes'] %}
+      <a class="{% if section_name == item %}active{% endif %}" href="{{ request.url_for('project_section', slug=project.slug, section=item) }}">{{ item.replace('_', ' ') }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="grid-two">
+    <article>
+      <h2>Edit {{ section_name.replace('_', ' ') }}</h2>
+      <form class="form-grid" method="post" action="{{ request.url_for('section_save', slug=project.slug, section=section_name) }}">
+        <label class="full-span">
+          Markdown
+          <textarea name="body" rows="20">{{ sections[section_name] }}</textarea>
+        </label>
+        <label class="full-span">
+          Addendum note
+          <input type="text" name="change_note" placeholder="What changed?">
+        </label>
+        <div class="actions-row full-span">
+          <button class="button button-primary" type="submit">Save section</button>
+          <button
+            class="button button-subtle"
+            type="button"
+            hx-post="{{ request.url_for('markdown_preview') }}"
+            hx-include="closest form"
+            hx-target="#markdown-preview"
+            hx-swap="innerHTML"
+          >
+            Refresh preview
+          </button>
+        </div>
+      </form>
+    </article>
+
+    <article>
+      <h2>Preview</h2>
+      <div class="markdown-preview" id="markdown-preview">{{ sections[section_name] | markdownify | safe }}</div>
+    </article>
+  </div>
+</section>
