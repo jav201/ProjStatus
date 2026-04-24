@@ -116,10 +116,13 @@ class Project(BaseModel):
     slug: str
     name: str
     description: str = ""
+    logo_path: str | None = None
     health: HealthStatus = HealthStatus.ON_TRACK
     status: ProjectStatus = ProjectStatus.ACTIVE
     start_date: date | None = None
     end_date: date | None = None
+    archived: bool = False
+    archived_at: datetime | None = None
     people: list[Person] = Field(default_factory=list)
     access_links: list[AccessCategory] = Field(default_factory=list)
     milestones: list[Milestone] = Field(default_factory=list)
@@ -161,10 +164,14 @@ class ProjectLoadResult(BaseModel):
 class DashboardProject(BaseModel):
     slug: str
     name: str
+    description: str = ""
+    logo_path: str | None = None
+    has_logo: bool = False
     health: HealthStatus
     status: ProjectStatus
     start_date: date | None = None
     end_date: date | None = None
+    archived: bool = False
     owner_names: list[str] = Field(default_factory=list)
     next_milestone: Milestone | None = None
     roadblock_count: int = 0

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 from app.config import AppConfig
-from app.models import Milestone, Task
+from app.models import Milestone, Person, Task
 from app.services.storage import StorageService
 
 
@@ -94,3 +95,54 @@ def test_restore_history_creates_new_addendum(tmp_path: Path) -> None:
 
     assert len(restored.addendums) == original_count + 1
     assert restored.addendums[0].note == "Rollback"
+
+
+def test_archive_duplicate_delete_and_dashboard_search_sort(tmp_path: Path) -> None:
+    storage = make_storage(tmp_path)
+    first = storage.create_project("Alpha Atlas", description="Migration control", end_date=date(2026, 5, 15))
+    second = storage.create_project("Beta Beacon", description="Service rollout", end_date=date(2026, 6, 1))
+
+    first_loaded = storage.load_project(first.slug)
+    first_loaded.project.people.append(Person(name="Alex Roe", email="alex@example.com", role="Project Manager"))
+    first_loaded.project.logo_path = "assets/logo.png"
+    first_loaded.project.milestones.append(Milestone(title="Kickoff", target_date=date(2026, 4, 28)))
+    first_logo = tmp_path / "projects" / first.slug / "assets" / "logo.png"
+    first_logo.parent.mkdir(parents=True, exist_ok=True)
+    first_logo.write_bytes(b"fake-png")
+    storage.save_project(first_loaded.project, first_loaded.sections, note="Seed alpha")
+
+    second_loaded = storage.load_project(second.slug)
+    second_loaded.project.people.append(Person(name="Morgan Lee", email="morgan@example.com", role="Sponsor"))
+    second_loaded.project.milestones.append(Milestone(title="Review", target_date=date(2026, 5, 20)))
+    storage.save_project(second_loaded.project, second_loaded.sections, note="Seed beta")
+
+    by_name = storage.list_dashboard_projects(sort_by="name", include_archived=True)
+    assert [item.slug for item in by_name] == [first.slug, second.slug]
+
+    by_milestone = storage.list_dashboard_projects(sort_by="next_milestone", include_archived=True)
+    assert [item.slug for item in by_milestone] == [first.slug, second.slug]
+
+    stakeholder_search = storage.list_dashboard_projects(search="alex@example.com", include_archived=True)
+    assert [item.slug for item in stakeholder_search] == [first.slug]
+
+    storage.archive_project(first.slug)
+    active_only = storage.list_dashboard_projects()
+    assert [item.slug for item in active_only] == [second.slug]
+
+    archived_visible = storage.list_dashboard_projects(include_archived=True)
+    archived_entry = next(item for item in archived_visible if item.slug == first.slug)
+    assert archived_entry.archived is True
+    assert archived_entry.has_logo is True
+
+    duplicate = storage.duplicate_project(first.slug, "Alpha Atlas Copy")
+    duplicate_dir = tmp_path / "projects" / duplicate.slug
+    assert duplicate_dir.exists()
+    assert (duplicate_dir / "assets" / "logo.png").exists()
+    assert len(list((duplicate_dir / "history").glob("*.json"))) == 1
+
+    storage.unarchive_project(first.slug)
+    restored_entry = next(item for item in storage.list_dashboard_projects(include_archived=True) if item.slug == first.slug)
+    assert restored_entry.archived is False
+
+    storage.delete_project(duplicate.slug)
+    assert not duplicate_dir.exists()

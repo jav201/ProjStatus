@@ -6,13 +6,25 @@ from typing import Any
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markdown import markdown
 
 from app.config import AppConfig
-from app.models import AccessCategory, AccessLink, ExportFormat, ExportRequest, Milestone, Person, Priority, Project, Task
+from app.models import (
+    AccessCategory,
+    AccessLink,
+    ExportFormat,
+    ExportRequest,
+    HealthStatus,
+    Milestone,
+    Person,
+    Priority,
+    Project,
+    ProjectStatus,
+    Task,
+)
 from app.services.exports import ExportService
 from app.services.mermaid import import_timeline, render_timeline
 from app.services.storage import SECTION_NAMES, StorageService
@@ -44,9 +56,16 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
     app.mount("/static", StaticFiles(directory=config.static_dir), name="static")
 
     @app.get("/", response_class=HTMLResponse, name="dashboard")
-    async def dashboard(request: Request, search: str = "", health: str = "") -> HTMLResponse:
-        projects = storage.list_dashboard_projects(search=search, health=health)
-        recent_addendums = storage.list_recent_addendums(limit=8)
+    async def dashboard(
+        request: Request,
+        search: str = "",
+        health: str = "",
+        sort: str = "recent_update",
+        show_archived: str = "",
+    ) -> HTMLResponse:
+        include_archived = is_truthy(show_archived)
+        projects = storage.list_dashboard_projects(search=search, health=health, sort_by=sort, include_archived=include_archived)
+        recent_addendums = storage.list_recent_addendums(limit=8, include_archived=include_archived)
         upcoming_milestones: list[tuple[str, Any]] = []
         blocked_tasks: list[tuple[str, Task]] = []
         today = date.today()
@@ -79,6 +98,8 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             "blocked_tasks": blocked_tasks[:8],
             "search": search,
             "health": health,
+            "sort": sort,
+            "show_archived": include_archived,
         }
         return render_template(request, "dashboard.html", context)
 
@@ -137,6 +158,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         slug: str,
         name: str = Form(...),
         description: str = Form(""),
+        logo_path: str = Form(""),
         health: str = Form(...),
         status: str = Form(...),
         start_date_value: str = Form("", alias="start_date"),
@@ -146,8 +168,9 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         loaded = safe_load_project(storage, slug)
         loaded.project.name = name.strip()
         loaded.project.description = description.strip()
-        loaded.project.health = health
-        loaded.project.status = status
+        loaded.project.logo_path = logo_path.strip() or None
+        loaded.project.health = HealthStatus(health)
+        loaded.project.status = ProjectStatus(status)
         loaded.project.start_date = parse_date(start_date_value)
         loaded.project.end_date = parse_date(end_date_value)
         preserve_timeline = not loaded.project.sync_state.timeline_is_app_owned
@@ -158,6 +181,58 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             preserve_timeline=preserve_timeline,
         )
         return redirect_to(request.url_for("project_overview", slug=slug), "Project details saved.", "success")
+
+    @app.post("/projects/{slug}/archive", name="project_archive")
+    async def archive_project(
+        request: Request,
+        slug: str,
+        change_note: str = Form(""),
+        return_to: str = Form(""),
+    ) -> RedirectResponse:
+        storage.archive_project(slug, note=change_note)
+        destination = safe_return_to(return_to, request.url_for("project_overview", slug=slug))
+        return redirect_to(destination, "Project archived.", "success")
+
+    @app.post("/projects/{slug}/unarchive", name="project_unarchive")
+    async def unarchive_project(
+        request: Request,
+        slug: str,
+        change_note: str = Form(""),
+        return_to: str = Form(""),
+    ) -> RedirectResponse:
+        storage.unarchive_project(slug, note=change_note)
+        destination = safe_return_to(return_to, request.url_for("project_overview", slug=slug))
+        return redirect_to(destination, "Project restored to the active list.", "success")
+
+    @app.post("/projects/{slug}/duplicate", name="project_duplicate")
+    async def duplicate_project(
+        request: Request,
+        slug: str,
+        new_name: str = Form(""),
+        change_note: str = Form(""),
+    ) -> RedirectResponse:
+        duplicated = storage.duplicate_project(slug, new_name=new_name, note=change_note)
+        return redirect_to(
+            request.url_for("project_overview", slug=duplicated.slug),
+            f"Created duplicate project '{duplicated.name}'.",
+            "success",
+        )
+
+    @app.post("/projects/{slug}/delete", name="project_delete")
+    async def delete_project(
+        request: Request,
+        slug: str,
+        confirm_name: str = Form(""),
+    ) -> RedirectResponse:
+        loaded = safe_load_project(storage, slug)
+        if confirm_name.strip() != loaded.project.name:
+            return redirect_to(
+                request.url_for("project_overview", slug=slug),
+                "Type the exact project name before deleting it.",
+                "error",
+            )
+        storage.delete_project(slug)
+        return redirect_to(request.url_for("dashboard"), f"Deleted project '{loaded.project.name}'.", "success")
 
     @app.post("/projects/{slug}/milestones", name="milestone_create")
     async def create_milestone(
@@ -595,9 +670,17 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         storage.restore_history(slug, addendum_id, note=change_note.strip() or "")
         return redirect_to(request.url_for("project_history", slug=slug), "Snapshot restored as a new addendum.", "success")
 
+    @app.get("/projects/{slug}/logo", name="project_logo")
+    async def project_logo(slug: str) -> FileResponse:
+        loaded = safe_load_project(storage, slug)
+        logo_file = storage.resolve_logo_file(loaded.project)
+        if logo_file is None:
+            raise HTTPException(status_code=404, detail="Logo not found")
+        return FileResponse(logo_file)
+
     @app.get("/exports", response_class=HTMLResponse, name="exports")
     async def export_page(request: Request, project: str = "") -> HTMLResponse:
-        projects = storage.list_dashboard_projects()
+        projects = storage.list_dashboard_projects(sort_by="name", include_archived=True)
         selected = [project] if project else []
         return render_template(request, "exports.html", {"projects": projects, "selected_projects": selected, "results": [], "batch_dir": ""})
 
@@ -611,7 +694,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
                 request,
                 "exports.html",
                 {
-                    "projects": storage.list_dashboard_projects(),
+                    "projects": storage.list_dashboard_projects(sort_by="name", include_archived=True),
                     "selected_projects": project_slugs,
                     "results": [],
                     "batch_dir": "",
@@ -624,7 +707,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             request,
             "exports.html",
             {
-                "projects": storage.list_dashboard_projects(),
+                "projects": storage.list_dashboard_projects(sort_by="name", include_archived=True),
                 "selected_projects": project_slugs,
                 "selected_formats": [item.value for item in formats],
                 "results": results,
@@ -653,9 +736,11 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         selected_addendum = loaded.addendums[0] if loaded.addendums else None
         if entry_id:
             selected_addendum = next((item for item in loaded.addendums if item.id == entry_id), selected_addendum)
+        logo_url = str(request.url_for("project_logo", slug=loaded.project.slug)) if storage.resolve_logo_file(loaded.project) else ""
 
         context = {
             "project": loaded.project,
+            "project_logo_url": logo_url,
             "sections": loaded.sections,
             "timeline_text": loaded.timeline_text,
             "active_tab": active_tab,
@@ -705,6 +790,13 @@ def redirect_to(url: str | Any, message: str, level: str) -> RedirectResponse:
     return RedirectResponse(f"{url}{separator}{query}", status_code=303)
 
 
+def safe_return_to(return_to: str, fallback: str | Any) -> str:
+    target = str(return_to or "")
+    if target.startswith("/"):
+        return target
+    return str(fallback)
+
+
 def validate_section(section: str) -> str:
     if section not in SECTION_NAMES:
         raise HTTPException(status_code=404, detail="Unknown section")
@@ -716,6 +808,10 @@ def safe_load_project(storage: StorageService, slug: str):
         return storage.load_project(slug)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Project not found") from exc
+
+
+def is_truthy(value: str) -> bool:
+    return value.lower() in {"1", "true", "on", "yes"}
 
 
 def find_item(items: list[Any], item_id: str) -> Any:

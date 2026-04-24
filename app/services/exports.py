@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import mimetypes
 from datetime import datetime
 from pathlib import Path
 from datetime import date
@@ -57,6 +59,7 @@ class ExportService:
         template = self.environment.get_template("export_project.html")
         html = template.render(
             project=loaded.project,
+            logo_data_uri=self._logo_data_uri(loaded.project),
             sections=loaded.sections,
             timeline_text=loaded.timeline_text,
             blocked_tasks=[task for task in loaded.project.tasks if task.blocked or task.column == "Blocked"],
@@ -145,3 +148,11 @@ class ExportService:
             return ExportResult(format=ExportFormat.PPTX, output_path=str(output_path), success=True)
         except Exception as exc:
             return ExportResult(format=ExportFormat.PPTX, output_path=str(output_path), success=False, message=str(exc))
+
+    def _logo_data_uri(self, project) -> str:
+        logo_file = self.storage.resolve_logo_file(project)
+        if logo_file is None:
+            return ""
+        mime_type = mimetypes.guess_type(logo_file.name)[0] or "application/octet-stream"
+        encoded = base64.b64encode(logo_file.read_bytes()).decode("ascii")
+        return f"data:{mime_type};base64,{encoded}"
