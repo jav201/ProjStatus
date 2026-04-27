@@ -2,13 +2,34 @@
 
 {% block title %}Dashboard | ProjStatus{% endblock %}
 
+{% macro sparkline(series) -%}
+  {%- set max_val = (series | max) or 1 -%}
+  {%- set step = 100 / ((series | length) - 1 if series | length > 1 else 1) -%}
+  <svg class="kpi-spark" viewBox="0 0 100 28" preserveAspectRatio="none" aria-hidden="true">
+    <polyline fill="none" stroke="currentColor" stroke-width="1.4" points="
+      {%- for value in series -%}
+        {{ loop.index0 * step }},{{ 26 - (value / max_val) * 22 }}
+      {% endfor -%}
+    " />
+  </svg>
+{%- endmacro %}
+
+{% macro delta_pill(value) -%}
+  {%- set sign = '+' if value > 0 else ('−' if value < 0 else '±') -%}
+  {%- set tone = 'up' if value > 0 else ('down' if value < 0 else 'flat') -%}
+  <span class="kpi-delta kpi-delta-{{ tone }}">{{ sign }}{{ value | abs }}</span>
+{%- endmacro %}
+
 {% block content %}
-  <section class="page-heading compact">
+  <section class="page-heading dashboard-heading">
     <div>
-      <p class="eyebrow">Portfolio</p>
-      <h1>Projects</h1>
+      <h1>Dashboard</h1>
+      <p class="muted">{{ projects | length }} project{{ '' if projects | length == 1 else 's' }}</p>
     </div>
-    <a class="button button-primary" href="{{ request.url_for('project_new') }}">+ New project</a>
+    <div class="actions-row">
+      <a class="button button-subtle" href="{{ request.url_for('exports') }}">Export</a>
+      <a class="button button-primary" href="{{ request.url_for('project_new') }}">+ New project</a>
+    </div>
   </section>
 
   <form class="filters card" method="get" action="{{ request.url_for('dashboard') }}">
@@ -19,7 +40,7 @@
     <label>
       Health
       <select name="health" onchange="this.form.submit()">
-        <option value="">All</option>
+        <option value="">All health</option>
         <option value="on-track" {% if health == 'on-track' %}selected{% endif %}>On Track</option>
         <option value="at-risk" {% if health == 'at-risk' %}selected{% endif %}>At Risk</option>
         <option value="blocked" {% if health == 'blocked' %}selected{% endif %}>Blocked</option>
@@ -29,15 +50,15 @@
     <label>
       Sort
       <select name="sort" onchange="this.form.submit()">
-        <option value="recent_update" {% if sort == 'recent_update' %}selected{% endif %}>Recent update</option>
-        <option value="next_milestone" {% if sort == 'next_milestone' %}selected{% endif %}>Next milestone</option>
-        <option value="end_date" {% if sort == 'end_date' %}selected{% endif %}>End date</option>
-        <option value="name" {% if sort == 'name' %}selected{% endif %}>Name</option>
+        <option value="recent_update" {% if sort == 'recent_update' %}selected{% endif %}>Sort · Recent update</option>
+        <option value="next_milestone" {% if sort == 'next_milestone' %}selected{% endif %}>Sort · Next milestone</option>
+        <option value="end_date" {% if sort == 'end_date' %}selected{% endif %}>Sort · End date</option>
+        <option value="name" {% if sort == 'name' %}selected{% endif %}>Sort · Name</option>
       </select>
     </label>
     <div class="segmented" role="tablist">
-      {% for key, label in [('cards', 'Cards'), ('gantt', 'Gantt'), ('table', 'Table')] %}
-        <a class="{% if view == key %}is-active{% endif %}" href="{{ request.url_for('dashboard') }}?{% set qp = request.query_params %}view={{ key }}{% if search %}&search={{ search }}{% endif %}{% if health %}&health={{ health }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if show_archived %}&show_archived=on{% endif %}">{{ label }}</a>
+      {% for key, label in [('cards', 'Cards'), ('table', 'Table'), ('gantt', 'Gantt')] %}
+        <a class="{% if view == key %}is-active{% endif %}" href="{{ request.url_for('dashboard') }}?view={{ key }}{% if search %}&search={{ search }}{% endif %}{% if health %}&health={{ health }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if show_archived %}&show_archived=on{% endif %}">{{ label }}</a>
       {% endfor %}
     </div>
     <label class="checkbox-row checkbox-row-small filter-checkbox">
@@ -47,22 +68,38 @@
     <input type="hidden" name="view" value="{{ view }}">
   </form>
 
-  <section class="stats-grid">
-    <article class="stat-card stat-card-on-track">
-      <span>On Track</span>
-      <strong>{{ summary_cards.on_track }}</strong>
+  <section class="kpi-row kpi-row-rich">
+    <article class="kpi-card-rich kpi-on-track">
+      <span class="kpi-label">● On track</span>
+      <div class="kpi-value-row">
+        <strong>{{ summary_cards.on_track }}</strong>
+        {{ delta_pill(kpi_deltas.on_track) }}
+      </div>
+      {{ sparkline(kpi_series.on_track) }}
     </article>
-    <article class="stat-card stat-card-warning">
-      <span>At Risk</span>
-      <strong>{{ summary_cards.at_risk }}</strong>
+    <article class="kpi-card-rich kpi-at-risk">
+      <span class="kpi-label">● At risk</span>
+      <div class="kpi-value-row">
+        <strong>{{ summary_cards.at_risk }}</strong>
+        {{ delta_pill(kpi_deltas.at_risk) }}
+      </div>
+      {{ sparkline(kpi_series.at_risk) }}
     </article>
-    <article class="stat-card stat-card-danger">
-      <span>Blocked</span>
-      <strong>{{ summary_cards.blocked }}</strong>
+    <article class="kpi-card-rich kpi-blocked">
+      <span class="kpi-label">● Blocked</span>
+      <div class="kpi-value-row">
+        <strong>{{ summary_cards.blocked }}</strong>
+        {{ delta_pill(kpi_deltas.blocked) }}
+      </div>
+      {{ sparkline(kpi_series.blocked) }}
     </article>
-    <article class="stat-card stat-card-accent">
-      <span>Due Soon</span>
-      <strong>{{ summary_cards.due_soon }}</strong>
+    <article class="kpi-card-rich kpi-due-soon">
+      <span class="kpi-label">● Due in 14 days</span>
+      <div class="kpi-value-row">
+        <strong>{{ summary_cards.due_soon }}</strong>
+        {{ delta_pill(kpi_deltas.due_soon) }}
+      </div>
+      {{ sparkline(kpi_series.due_soon) }}
     </article>
   </section>
 
@@ -82,42 +119,53 @@
         {% if portfolio_gantt.start %}<span class="pill">{{ portfolio_gantt.start }} → {{ portfolio_gantt.end }}</span>{% endif %}
       </div>
       {% if portfolio_gantt.rows %}
-        <div class="portfolio-gantt portfolio-gantt-wide">
-          {% if portfolio_gantt.axis_ticks %}
-            <div class="gantt-row gantt-axis-row">
-              <div class="gantt-row-label gantt-row-label-axis"></div>
-              <div class="gantt-axis">
-                {% for tick in portfolio_gantt.axis_ticks %}
-                  <span class="gantt-axis-tick" style="left: {{ tick.offset }}%;">{{ tick.label }}</span>
-                {% endfor %}
-              </div>
+        <div class="portfolio-gantt-v2">
+          <header class="pg-header">
+            <span class="pg-label-col">Project</span>
+            <div class="pg-axis">
+              {% for tick in portfolio_gantt.axis_ticks %}
+                <span class="pg-axis-tick" style="left: {{ tick.offset }}%;">{{ tick.label }}</span>
+              {% endfor %}
             </div>
-          {% endif %}
-          {% for row in portfolio_gantt.rows %}
-            <div class="gantt-row">
-              <div class="gantt-row-label">
-                <a href="{{ request.url_for('project_overview', slug=row.slug) }}">{{ row.name }}</a>
-                <span>{{ row.start }} → {{ row.end }}</span>
-              </div>
-              <div class="gantt-track">
-                {% if portfolio_gantt.today_percent is not none %}
-                  <span class="gantt-today" style="left: {{ portfolio_gantt.today_percent }}%"></span>
-                {% endif %}
-                <a class="gantt-bar gantt-health-{{ row.health }}" href="{{ request.url_for('project_overview', slug=row.slug) }}" style="left: {{ row.offset }}%; width: {{ row.width }}%" title="{{ row.name }}: {{ row.start }} to {{ row.end }}">
-                  <span>{{ row.name }}</span>
+          </header>
+          <div class="pg-body" {% if portfolio_gantt.today_percent is not none %}style="--pg-today: {{ portfolio_gantt.today_percent }}%;"{% endif %}>
+            {% if portfolio_gantt.today_percent is not none %}
+              <span class="pg-today-line" aria-hidden="true"></span>
+            {% endif %}
+            {% for row in portfolio_gantt.rows %}
+              {% set pct = (row.progress_pct * 100) | round | int %}
+              <div class="pg-row">
+                <a class="pg-label" href="{{ request.url_for('project_overview', slug=row.slug) }}" title="{{ row.name }}">
+                  <span class="pg-dot health-{{ row.health }}"></span>
+                  <span class="pg-name">{{ row.name }}</span>
+                  {% if row.owners %}
+                    <span class="pg-owners">
+                      {% for owner in row.owners %}
+                        <span class="pg-owner-chip" title="{{ owner.name }}">{{ owner.initials }}</span>
+                      {% endfor %}
+                      {% if row.extra_owner_count %}<span class="pg-owner-chip pg-owner-more">+{{ row.extra_owner_count }}</span>{% endif %}
+                    </span>
+                  {% endif %}
                 </a>
-                {% for milestone in row.milestones %}
-                  <span class="gantt-milestone gantt-milestone-{{ milestone.status }}" style="left: {{ milestone.offset }}%" title="{{ milestone.title }} — {{ milestone.date }}"></span>
-                {% endfor %}
+                <div class="pg-track">
+                  <a class="pg-bar pg-health-{{ row.health }}" href="{{ request.url_for('project_overview', slug=row.slug) }}" style="left: {{ row.offset }}%; width: {{ row.width }}%;" title="{{ row.name }}: {{ row.start }} → {{ row.end }} · {{ pct }}%">
+                    <span class="pg-bar-fill" style="width: {{ pct }}%;"></span>
+                    <span class="pg-bar-pct">{{ pct }}%</span>
+                  </a>
+                  {% for milestone in row.milestones %}
+                    <span class="pg-milestone pg-milestone-{{ milestone.status }}" style="left: {{ milestone.offset }}%" title="{{ milestone.title }} — {{ milestone.date }}"></span>
+                  {% endfor %}
+                </div>
               </div>
-            </div>
-          {% endfor %}
+            {% endfor %}
+          </div>
         </div>
-        <div class="gantt-legend">
+        <div class="pg-legend">
           <span class="legend-item"><span class="swatch swatch-on-track"></span>On track</span>
           <span class="legend-item"><span class="swatch swatch-at-risk"></span>At risk</span>
           <span class="legend-item"><span class="swatch swatch-blocked"></span>Blocked</span>
           <span class="legend-item"><span class="swatch swatch-complete"></span>Complete</span>
+          <span class="legend-item"><span class="swatch swatch-milestone"></span>Milestone</span>
           <span class="legend-item"><span class="swatch swatch-today"></span>Today</span>
         </div>
       {% else %}
@@ -164,75 +212,86 @@
   {% else %}
     <section class="dashboard-grid">
       <div class="stack">
-        {% for project in projects %}
-          <article class="card project-card {% if project.archived %}project-card-archived{% endif %}">
-            <div class="project-card-header project-card-header-rich">
-              <div class="project-card-identity">
-                <div class="logo-frame">
-                  {% if project.has_logo %}
-                    <img src="{{ request.url_for('project_logo', slug=project.slug) }}" alt="{{ project.name }} logo">
-                  {% else %}
-                    <span>{{ project.name[:2].upper() }}</span>
-                  {% endif %}
-                </div>
-                <div class="project-card-copy-block">
-                  <div class="project-card-title-row">
-                    <span class="health-badge health-{{ project.health.value }}">{{ project.health.value }}</span>
-                    {% if project.archived %}<span class="pill pill-muted">Archived</span>{% endif %}
-                  </div>
-                  <h2><a href="{{ request.url_for('project_overview', slug=project.slug) }}">{{ project.name }}</a></h2>
-                  {% if project.description %}<p class="project-card-copy">{{ project.description }}</p>{% endif %}
-                </div>
+        {% for card in project_cards %}
+          {% set project = card.entry %}
+          {% set pct = (card.progress_pct * 100) | round | int %}
+          <article class="project-card-rich {% if project.archived %}is-archived{% endif %}">
+            <header class="project-card-rich__head">
+              <div class="project-card-rich__title">
+                <h3><a href="{{ request.url_for('project_overview', slug=project.slug) }}">{{ project.name }}</a></h3>
+                <small class="muted slug">{{ project.slug }}</small>
               </div>
               <div class="card-actions">
-                <a class="button button-primary" href="{{ request.url_for('project_overview', slug=project.slug) }}">Open</a>
+                {% if project.archived %}<span class="pill pill-muted">Archived</span>{% endif %}
+                <span class="health-pill health-{{ project.health.value }}">{{ project.health.value }}</span>
                 <details class="menu">
                   <summary aria-label="More actions">⋯</summary>
                   <div class="menu-panel">
+                    <a href="{{ request.url_for('project_overview', slug=project.slug) }}">Open</a>
                     <a href="{{ request.url_for('project_view', slug=project.slug) }}">Present</a>
                     <a href="{{ request.url_for('project_board', slug=project.slug) }}">Board</a>
                     <a href="{{ request.url_for('exports') }}?project={{ project.slug }}">Export</a>
-                    <form method="post" action="{{ request.url_for('project_duplicate', slug=project.slug) }}">
-                      <input type="hidden" name="new_name" value="{{ project.name }} Copy">
-                      <input type="hidden" name="change_note" value="Duplicated from dashboard">
-                      <button type="submit">Duplicate</button>
-                    </form>
+                    <form method="post" action="{{ request.url_for('project_duplicate', slug=project.slug) }}"><input type="hidden" name="new_name" value="{{ project.name }} Copy"><input type="hidden" name="change_note" value="Duplicated from dashboard"><button type="submit">Duplicate</button></form>
                     {% if project.archived %}
-                      <form method="post" action="{{ request.url_for('project_unarchive', slug=project.slug) }}">
-                        <input type="hidden" name="return_to" value="{{ request.url.path }}">
-                        <button type="submit">Unarchive</button>
-                      </form>
+                      <form method="post" action="{{ request.url_for('project_unarchive', slug=project.slug) }}"><input type="hidden" name="return_to" value="{{ request.url.path }}"><button type="submit">Unarchive</button></form>
                     {% else %}
-                      <form method="post" action="{{ request.url_for('project_archive', slug=project.slug) }}">
-                        <input type="hidden" name="return_to" value="{{ request.url.path }}">
-                        <button type="submit">Archive</button>
-                      </form>
+                      <form method="post" action="{{ request.url_for('project_archive', slug=project.slug) }}"><input type="hidden" name="return_to" value="{{ request.url.path }}"><button type="submit">Archive</button></form>
                     {% endif %}
                   </div>
                 </details>
               </div>
+            </header>
+
+            {% if project.description %}
+              <p class="project-card-rich__copy">{{ project.description }}</p>
+            {% endif %}
+
+            <div class="project-card-rich__progress">
+              <div class="progress-line">
+                <span class="progress-bar progress-block progress-{{ project.health.value }}">
+                  <span class="progress-fill" style="width: {{ pct }}%"></span>
+                </span>
+                <span class="progress-num">{{ pct }}% complete</span>
+              </div>
+              <span class="muted date-range">
+                {% if project.start_date or project.end_date %}{{ project.start_date or '—' }} → {{ project.end_date or '—' }}{% endif %}
+              </span>
             </div>
 
-            <dl class="project-meta-grid">
-              {% if project.start_date or project.end_date %}<div><dt>Dates</dt><dd>{{ project.start_date or '—' }} → {{ project.end_date or '—' }}</dd></div>{% endif %}
-              {% if project.owner_names %}<div><dt>Owners</dt><dd>{{ project.owner_names|join(", ") }}</dd></div>{% endif %}
-              {% if project.roadblock_count %}<div><dt>Roadblocks</dt><dd>{{ project.roadblock_count }}</dd></div>{% endif %}
-              {% if project.next_milestone %}<div><dt>Next</dt><dd>{{ project.next_milestone.title }}{% if project.next_milestone.target_date %} · {{ project.next_milestone.target_date }}{% endif %}</dd></div>{% endif %}
-              {% if project.recent_addendum_at %}<div><dt>Updated</dt><dd>{{ project.recent_addendum_at | when }}</dd></div>{% endif %}
-            </dl>
+            <footer class="project-card-rich__foot">
+              <div class="assignee-row">
+                {% for name in card.owners %}
+                  {% set parts = name.split() %}
+                  <span class="assignee-chip" title="{{ name }}">{{ parts[0][:1] ~ (parts[1][:1] if parts | length > 1 else '') }}</span>
+                {% endfor %}
+              </div>
+              <span class="muted next-line">
+                {% if card.next_milestone %}<strong>Next:</strong> {{ card.next_milestone.title }}{% else %}<strong>Next:</strong> —{% endif %}
+                {% if project.recent_addendum_at %} · {{ project.recent_addendum_at | when }}{% endif %}
+              </span>
+            </footer>
           </article>
         {% endfor %}
       </div>
 
-      <aside class="stack">
-        <section class="card">
-          <h3>Upcoming milestones</h3>
+      <aside class="stack right-rail">
+        <section class="card rail-card">
+          <header class="rail-header">
+            <h3>Upcoming milestones</h3>
+            <span class="muted">{{ upcoming_milestones | length }}</span>
+          </header>
           {% if upcoming_milestones %}
-            <ul class="simple-list">
+            <ul class="rail-list">
               {% for slug, milestone in upcoming_milestones %}
                 <li>
-                  <a href="{{ request.url_for('project_overview', slug=slug) }}">{{ milestone.title }}</a>
-                  <span>{{ milestone.target_date }}</span>
+                  <a href="{{ request.url_for('project_overview', slug=slug) }}">
+                    <span class="rail-avatar">{{ slug.split('-')[0][:2].upper() }}</span>
+                    <span class="rail-body">
+                      <strong>{{ milestone.title }}</strong>
+                      <small class="muted">{{ slug }}</small>
+                    </span>
+                  </a>
+                  <span class="rail-when">{{ milestone.target_date }}</span>
                 </li>
               {% endfor %}
             </ul>
@@ -240,27 +299,45 @@
         </section>
 
         {% if blocked_tasks %}
-          <section class="card">
-            <h3>Blocked tasks</h3>
-            <ul class="simple-list">
+          <section class="card rail-card">
+            <header class="rail-header">
+              <h3>Blocked tasks</h3>
+              <span class="muted">{{ blocked_tasks | length }}</span>
+            </header>
+            <ul class="rail-list">
               {% for slug, task in blocked_tasks %}
                 <li>
-                  <a href="{{ request.url_for('project_board', slug=slug) }}">{{ task.title }}</a>
-                  <span>{{ slug }}</span>
+                  <a href="{{ request.url_for('project_board', slug=slug) }}">
+                    <span class="rail-avatar">{{ slug.split('-')[0][:2].upper() }}</span>
+                    <span class="rail-body">
+                      <strong>{{ task.title }}</strong>
+                      <small class="muted">{{ slug }}</small>
+                    </span>
+                  </a>
                 </li>
               {% endfor %}
             </ul>
           </section>
         {% endif %}
 
-        <section class="card">
-          <h3>Recent activity</h3>
+        <section class="card rail-card">
+          <header class="rail-header">
+            <h3>Recent addendums</h3>
+            <span class="muted">{{ recent_addendums | length }}</span>
+          </header>
           {% if recent_addendums %}
-            <ul class="simple-list">
+            <ul class="rail-list">
               {% for slug, addendum in recent_addendums %}
+                {% set summary = addendum.summary[0] if addendum.summary else (addendum.note or 'Saved project') %}
                 <li>
-                  <a href="{{ request.url_for('project_history', slug=slug) }}?entry={{ addendum.id }}">{{ addendum.summary[0] }}</a>
-                  <span>{{ addendum.created_at | when }}</span>
+                  <a href="{{ request.url_for('project_history', slug=slug) }}?entry={{ addendum.id }}">
+                    <span class="rail-avatar">{{ slug.split('-')[0][:2].upper() }}</span>
+                    <span class="rail-body">
+                      <strong>{{ summary }}</strong>
+                      <small class="muted">{{ slug }}</small>
+                    </span>
+                  </a>
+                  <span class="rail-when">{{ addendum.created_at | when }}</span>
                 </li>
               {% endfor %}
             </ul>
