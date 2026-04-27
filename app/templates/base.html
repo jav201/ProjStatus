@@ -21,9 +21,9 @@
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script defer src="{{ request.url_for('static', path='/app.js') }}"></script>
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
   <div class="page-shell">
-    <header class="topbar">
+    <header class="topbar top-nav">
       <a class="brand" href="{{ request.url_for('dashboard') }}">
         <span class="brand-kicker">Local-first PM</span>
         <strong>ProjStatus</strong>

@@ -1,8 +1,8 @@
 # ProjStatus User Guide
 
-ProjStatus is a local-first project management application. It stores projects, templates, document field maps, history, and exports as files inside this repository, so the workspace can be reviewed with Git and edited outside the app when needed.
+ProjStatus is a local-first project management application. Project data, project templates, document templates, history, and exports all live as files inside the repository, so the workspace can be reviewed with Git and edited outside the app.
 
-## Start the Application
+## Start the application
 
 From the repository root:
 
@@ -10,311 +10,146 @@ From the repository root:
 python -m uvicorn app.main:app --reload
 ```
 
-Then open:
+Then open `http://127.0.0.1:8000`. On Windows you can also run `.\start_projstatus.bat`.
 
-```text
-http://127.0.0.1:8000
+## Top navigation
+
+- **Dashboard** — portfolio of every project, with three views: Cards, Gantt, Table.
+- **New Project** — create a blank project or one based on a project template.
+- **Templates** — manage project templates and Word document templates.
+- **Exports** — export selected projects to HTML, PNG, or PPTX.
+
+## Dashboard
+
+The dashboard is a single page with a search box, health filter, sort selector, and a segmented `Cards | Gantt | Table` toggle. It updates as you change a control — no Apply button.
+
+- **Cards** view: each project shows a Health badge, dates, owners, next milestone, blocked-tasks count, and last update (relative time). One primary `Open` button plus a `⋯` menu for Present, Board, Export, Duplicate, Archive.
+- **Gantt** view: a portfolio Gantt with month tick marks across the top, today line, and per-project bars colored by health. A legend explains the colors.
+- **Table** view: one row per project with health, dates, owners, roadblocks, next milestone, and "updated".
+
+## Project workspace
+
+Each project page has four main tabs plus History on the right:
+
+- **Summary** — KPI cards (people / milestones / tasks / blocked), upcoming milestones, roadblocks, people directory, an "Edit project details" panel, Duplicate / Save-as-template forms, and a footer **Danger zone** that holds the permanent-delete control.
+- **Plan** — sub-toggle for `Board | Gantt`. The Board is a Kanban with drag-and-drop and a side panel for editing a task (title, dates, milestone, assignees). The Gantt is the editable Mermaid timeline.
+- **People** — stakeholders and access links.
+- **Notes** — sub-toggle across the four Markdown sections: Content, Change requests, Roadblocks, Notes.
+- **History** — addendums, with diffs and a one-click Restore.
+
+A **Present** button in the project header switches to a chrome-free executive snapshot for screen sharing.
+
+## Word document templates — how to write tags
+
+Each document template links a `.docx` file you upload to a list of named **fields**. Inside the Word document you use Jinja-style tags. They are substituted with the field values plus a few project-derived defaults whenever you click **Download filled** for a project.
+
+### Single value
+
+In Word, type:
+
+```
+{{ part_number }}
 ```
 
-On Windows, you can also run:
+In ProjStatus, define a field with key `part_number`. The downloaded document contains the field's current value. Tag keys are case-sensitive and must use only `[a-zA-Z_]\w*`.
 
-```powershell
-.\start_projstatus.bat
+### Always-available project fields
+
+The following keys are populated automatically — you don't need to add them as fields:
+
+```
+{{ project_name }}
+{{ project_description }}
+{{ project_status }}
+{{ project_health }}
+{{ project_start_date }}
+{{ project_end_date }}
+{{ today }}
 ```
 
-## Main Navigation
+### Loops over project data
 
-- `Dashboard`: Portfolio view of all projects.
-- `New Project`: Create a blank project or create one from a project template.
-- `Templates`: Manage project templates and document templates.
-- `Exports`: Export selected projects to supported output formats.
+`milestones` and `people` are exposed as lists. Use Jinja `{% for %}`:
 
-## Create a Project
+```
+{% for m in milestones %}- {{ m.title }} ({{ m.status }} – {{ m.target_date }})
+{% endfor %}
 
-1. Open `New Project`.
-2. Enter a project name, description, start date, and end date.
-3. Select `Blank project` or choose a saved project template.
-4. Click `Create project`.
-
-Example:
-
-```text
-Project name: RFQ Line 12 Automation
-Description: Track engineering, sourcing, and supplier quote readiness.
-Start date: 2026-05-01
-End date: 2026-07-15
-Project template: Launch Template
+{% for p in people %}{{ p.name }} – {{ p.role }} – {{ p.email }}
+{% endfor %}
 ```
 
-The app creates a folder under:
+### Quote-pack example
 
-```text
-projects/rfq-line-12-automation/
+A `Supplier Quote Pack` document might contain:
+
+```
+Subject: Quote request for {{ part_number }} ({{ project_name }})
+
+Dear {{ supplier_name }},
+
+Please provide a quote for the following:
+  – Part number: {{ part_number }}
+  – Revision: {{ revision }}
+  – Annual volume: {{ annual_volume }}
+
+Please respond by {{ project_end_date }}.
+
+Regards,
+The {{ project_name }} team — {{ today }}
 ```
 
-That folder contains the project JSON, Markdown sections, Mermaid timeline, and history snapshots.
+### How the upload works
 
-## Use Dashboard Views
+1. Open **Templates**.
+2. Pick a document template (or create one with at least one field).
+3. Click **Upload .docx** under the template card and select your Word file.
+4. The page redraws with a "Tags found in this document" table showing every `{{ tag }}` you used and whether it's mapped to a field, filled, missing, or unmapped.
+5. Pick a project from the **Download filled** dropdown and click the button — the rendered `.docx` downloads.
 
-The dashboard has a `View` selector:
+### Field metadata you can also store
 
-- `Cards`: Best for quick project review.
-- `Gantt`: Shows all dated projects on one portfolio timeline.
-- `Table`: Best for comparing project status, owners, dates, roadblocks, and next milestones.
+Each field row carries a key, a friendly label, a type (`string`, `excel_cell`, `excel_table`), a list of aliases (alternate names other documents use for the same value), a required/optional flag, and a current value. Aliases are used by the **Field homologation** panel to flag when two documents call the same data by different names.
 
-For the Gantt view to show a project, the project needs at least a start date or end date. Milestones with target dates appear as markers inside the project bar.
+The current implementation substitutes the `value` text directly into the document. Excel cell/range references such as `Quote.xlsx!B12` are stored as plain strings — automatic Excel extraction is on the roadmap.
 
-## Manage a Project
+## Project templates
 
-Open a project from the dashboard. The project workspace includes:
+Open a project, scroll down to **Save as project template** in the Summary tab, name it, and click Create template. To create a project from one, open **New Project** and choose your template.
 
-- `Overview`: Project metadata, milestones, project actions, and template creation.
-- `View Mode`: Read-only summary views for presentations and reviews.
-- `Board`: Kanban-style task tracking.
-- `Timeline`: Mermaid timeline editor.
-- `People & Access`: Stakeholders and project links.
-- `Sections`: Markdown content, change requests, roadblocks, and notes.
-- `History`: Saved addendums and restore points.
+## Storage layout
 
-## Save a Project as a Template
+```
+projects/<slug>/
+  project.json
+  content.md
+  change_requests.md
+  roadblocks.md
+  notes.md
+  timeline.mmd
+  history/<timestamp>.json
+  history/<timestamp>.md
 
-1. Open a project.
-2. Go to `Overview`.
-3. In `Project actions`, find `Save as template`.
-4. Enter a template name and notes.
-5. Click `Create template`.
+project_templates/<slug>.json
+document_templates/<slug>.json
+document_templates/<slug>/template.docx   (optional uploaded Word file)
 
-Example:
-
-```text
-Template name: Supplier RFQ Project Template
-Template notes: Use for supplier quote projects with milestones, board columns, and standard sections.
+exports/
 ```
 
-The template is stored as:
-
-```text
-project_templates/supplier-rfq-project-template.json
-```
-
-When creating a new project, select this template from the `Project template` dropdown. The new project copies starter milestones, tasks, people, access links, sections, and timeline structure.
-
-## Document Templates
-
-Document templates define the information required to complete a document package. They are useful when several documents need the same project or product data, but each document may use different names for the same field.
-
-Open `Templates`, then use `Create document template`.
-
-Each field line uses this format:
-
-```text
-key|label|type|aliases|required_or_optional|value
-```
-
-Where:
-
-- `key`: Canonical internal name used to homologate equivalent fields.
-- `label`: Display name shown to users.
-- `type`: One of `string`, `excel_table`, or `excel_cell`.
-- `aliases`: Alternate names used by other documents, separated by commas.
-- `required_or_optional`: Use `required` or `optional`.
-- `value`: Current value. Leave blank when missing.
-
-## Document Tag Examples
-
-### Simple String Field
-
-Use this for normal text values such as part numbers, customer names, revision levels, owners, or supplier names.
-
-```text
-part_number|Part Number|string|PN,Item Number,Material Number|required|
-```
-
-This means:
-
-- Canonical key: `part_number`
-- Display label: `Part Number`
-- Type: text string
-- Equivalent labels: `PN`, `Item Number`, `Material Number`
-- Required: yes
-- Current value: missing
-
-If the value is known:
-
-```text
-part_number|Part Number|string|PN,Item Number,Material Number|required|ABC-12345
-```
-
-### Excel Cell Field
-
-Use this when a specific Excel cell should provide the value.
-
-```text
-quoted_price|Quoted Price|excel_cell|Unit Price,Cost,Quote|required|Quote.xlsx!B12
-```
-
-This records that the required value is expected from cell `B12` in `Quote.xlsx`.
-
-Another example:
-
-```text
-annual_volume|Annual Volume|excel_cell|EAU,Estimated Annual Usage|required|Demand.xlsx!C8
-```
-
-### Excel Table Field
-
-Use this when the needed information is a table, not a single cell.
-
-```text
-bom_table|Bill of Materials|excel_table|BOM,Part List,Material List|required|BOM.xlsx!A1:H40
-```
-
-This records that the document needs a BOM table from the range `A1:H40`.
-
-Another example:
-
-```text
-tooling_cost_table|Tooling Cost Table|excel_table|Tooling,CapEx,Investment|required|
-```
-
-This field is required but missing because the value is blank.
-
-## Homologating Fields Across Documents
-
-Use the same `key` when different documents refer to the same information with different labels.
-
-Example document template A:
-
-```text
-part_number|Part Number|string|PN,Item Number|required|ABC-12345
-```
-
-Example document template B:
-
-```text
-part_number|Material Number|string|Part No,Component ID|required|
-```
-
-Both fields use the same canonical key:
-
-```text
-part_number
-```
-
-The `Templates` page groups these under `Field homologation`, showing:
-
-- the canonical key
-- all labels used across documents
-- all aliases
-- how many documents use the field
-- how many required values are missing
-
-This lets you treat `Part Number`, `Material Number`, `PN`, and `Component ID` as the same required business field.
-
-## Completion Percentage
-
-Each document template calculates completion based on required fields only.
-
-Example:
-
-```text
-part_number|Part Number|string|PN|required|ABC-12345
-supplier_name|Supplier Name|string|Vendor|required|
-quoted_price|Quoted Price|excel_cell|Cost|required|Quote.xlsx!B12
-bom_table|BOM Table|excel_table|Bill of Materials|optional|
-```
-
-Required fields:
-
-- `part_number`: filled
-- `supplier_name`: missing
-- `quoted_price`: filled
-
-Completion:
-
-```text
-2 filled required fields / 3 required fields = 67%
-```
-
-The optional `bom_table` does not reduce the completion percentage.
-
-## Recommended Document Template Patterns
-
-Use stable canonical keys:
-
-```text
-part_number
-revision
-supplier_name
-quoted_price
-annual_volume
-bom_table
-tooling_cost_table
-```
-
-Avoid creating different keys for the same concept:
-
-```text
-part_number
-pn
-item_number
-material_number
-```
-
-Instead, use one canonical key and put the alternate names in `aliases`:
-
-```text
-part_number|Part Number|string|PN,Item Number,Material Number|required|
-```
-
-## Current Document Template Scope
-
-The current implementation stores document template definitions, required tags, aliases, values, missing-field status, completion percentage, and homologation groups.
-
-It does not yet automatically parse uploaded Word, PDF, or Excel files. For now, enter the value or source reference manually, such as:
-
-```text
-Quote.xlsx!B12
-BOM.xlsx!A1:H40
-ABC-12345
-Supplier One
-```
-
-The next natural enhancement is to add document file uploads and automatic extraction from Excel cells and tables.
+`timeline.mmd` is editable, but the round-trip back into `project.json` only carries title, dates, and Mermaid status keywords (`active`, `done`, `crit`). Any unrecognized line surfaces as a yellow banner on the Plan → Gantt page.
 
 ## Exports
 
-Open `Exports`, select one or more projects, choose formats, and run the export. HTML and PPTX exports work from the base app. PNG export requires Playwright and Chromium.
-
-Install export dependencies with:
+Open **Exports**, pick projects + formats, and run. HTML and PPTX work out of the box. PNG requires Playwright with Chromium:
 
 ```powershell
 python -m pip install -e ".[exports]"
 python -m playwright install chromium
 ```
 
-## Storage Reference
+To enable Word filling:
 
-Project data:
-
-```text
-projects/<project-slug>/
-```
-
-Project templates:
-
-```text
-project_templates/<template-slug>.json
-```
-
-Document templates:
-
-```text
-document_templates/<template-slug>.json
-```
-
-Exports:
-
-```text
-exports/
+```powershell
+python -m pip install -e ".[docx]"
 ```

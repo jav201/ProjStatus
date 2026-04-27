@@ -3,103 +3,137 @@
 {% block title %}Templates | ProjStatus{% endblock %}
 
 {% block content %}
-  <section class="page-heading">
+  <section class="page-heading compact">
     <div>
       <p class="eyebrow">Templates</p>
-      <h1>Reuse project structures and document field maps.</h1>
-      <p class="hero-copy">Project templates create new workspaces from proven structures. Document templates track required tags, aliases, and completion.</p>
+      <h1>Reusable project structures and Word document tags.</h1>
     </div>
-    <a class="button button-primary" href="{{ request.url_for('project_new') }}">Create from template</a>
   </section>
 
-  <section class="grid-two">
-    <article class="card">
-      <div class="section-heading">
-        <h2>Project templates</h2>
-        <p class="muted">{{ project_templates|length }} available</p>
-      </div>
-      {% if project_templates %}
-        <ul class="simple-list template-list">
-          {% for template in project_templates %}
-            <li>
-              <span>
-                <strong>{{ template.name }}</strong>
-                <small>{{ template.description or "No notes" }}</small>
-              </span>
-              <span>{{ template.created_at }}</span>
-            </li>
-          {% endfor %}
-        </ul>
-      {% else %}
-        <p class="muted">Open a project and use Save as template to create the first project template.</p>
-      {% endif %}
+  <section class="card">
+    <details class="hint" open>
+      <summary><strong>How Word document tags work</strong></summary>
+      <p>Open your <code>.docx</code> in Word and write a tag wherever the value should appear. Tags use double curly braces:</p>
+      <ul>
+        <li><code>{% raw %}{{ part_number }}{% endraw %}</code> — replaced with the value of the field whose <em>key</em> is <code>part_number</code>.</li>
+        <li><code>{% raw %}{{ project_name }}{% endraw %}</code>, <code>{% raw %}{{ project_start_date }}{% endraw %}</code>, <code>{% raw %}{{ project_health }}{% endraw %}</code>, <code>{% raw %}{{ today }}{% endraw %}</code> — always available.</li>
+        <li><code>{% raw %}{% for m in milestones %}{{ m.title }} – {{ m.target_date }}{% endfor %}{% endraw %}</code> — loop over project data.</li>
+      </ul>
+      <p>Each tag must match the <strong>key</strong> of a field below. Upload your <code>.docx</code>, link the tags to fields, then click <em>Download filled</em> for a project.</p>
+    </details>
+  </section>
 
-      <div class="section-divider"></div>
+  <section class="card">
+    <div class="section-heading">
+      <h2>Document templates</h2>
+      <p class="muted">{{ document_templates|length }} available</p>
+    </div>
 
-      <form class="form-grid" method="post" action="{{ request.url_for('project_template_create') }}">
-        <label class="full-span">
-          Source project
-          <select name="project_slug" required>
-            {% for project in projects %}
-              <option value="{{ project.slug }}">{{ project.name }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="full-span">
-          Template name
-          <input type="text" name="name" required>
-        </label>
-        <label class="full-span">
-          Template notes
-          <textarea name="description" rows="3"></textarea>
-        </label>
-        <div class="full-span">
-          <button class="button button-primary" type="submit">Create project template</button>
-        </div>
-      </form>
-    </article>
-
-    <article class="card">
-      <div class="section-heading">
-        <h2>Document templates</h2>
-        <p class="muted">{{ document_templates|length }} available</p>
-      </div>
-      {% if document_templates %}
-        <div class="stack compact">
-          {% for template in document_templates %}
-            <section class="template-card">
-              <div class="section-heading">
-                <div>
-                  <h3>{{ template.name }}</h3>
-                  <p class="muted">{{ template.description or "No notes" }}</p>
-                </div>
-                <span class="completion-ring">{{ template.completion_percent }}%</span>
+    {% if document_template_views %}
+      <div class="stack">
+        {% for view in document_template_views %}
+          {% set template = view.template %}
+          <article class="document-template">
+            <header class="document-template__header">
+              <div>
+                <h3>{{ template.name }}</h3>
+                <p class="muted">{{ template.description or "No notes" }}</p>
               </div>
-              {% if template.missing_fields %}
-                <p class="alert-line warning">Missing: {{ template.missing_fields|map(attribute='label')|join(", ") }}</p>
+              <span class="completion-pill" data-pct="{{ template.completion_percent }}">{{ template.completion_percent }}%</span>
+            </header>
+
+            <div class="document-template__file">
+              {% if template.docx_filename %}
+                <p>
+                  <strong>📎 {{ template.docx_filename }}</strong>
+                  {% if view.tags_found %}
+                    <span class="muted">· {{ view.tags_found|length }} tag{{ '' if view.tags_found|length == 1 else 's' }} found</span>
+                  {% else %}
+                    <span class="alert-line warning">No <code>{{ '{{ … }}' }}</code> tags detected — check your Word file.</span>
+                  {% endif %}
+                </p>
+                <div class="actions-row">
+                  <form method="post" action="{{ request.url_for('document_template_render', slug=template.slug) }}">
+                    <select name="project_slug" required aria-label="Project">
+                      {% for project in projects %}
+                        <option value="{{ project.slug }}">{{ project.name }}</option>
+                      {% endfor %}
+                    </select>
+                    <button class="button button-primary" type="submit">Download filled</button>
+                  </form>
+                  <form method="post" action="{{ request.url_for('document_template_upload', slug=template.slug) }}" enctype="multipart/form-data" class="inline-form">
+                    <input type="file" name="file" accept=".docx" required>
+                    <button class="button" type="submit">Replace .docx</button>
+                  </form>
+                  <form method="post" action="{{ request.url_for('document_template_remove_file', slug=template.slug) }}" class="inline-form">
+                    <button class="button button-subtle" type="submit">Remove file</button>
+                  </form>
+                </div>
               {% else %}
-                <p class="alert-line">All required fields are filled.</p>
+                <p class="muted">No Word file uploaded yet.</p>
+                <form method="post" action="{{ request.url_for('document_template_upload', slug=template.slug) }}" enctype="multipart/form-data" class="inline-form">
+                  <input type="file" name="file" accept=".docx" required>
+                  <button class="button button-primary" type="submit">Upload .docx</button>
+                </form>
               {% endif %}
-              <ul class="field-list">
-                {% for field in template.fields %}
-                  <li>
-                    <span>
-                      <strong>{{ field.label }}</strong>
-                      <small>{{ field.key }} · {{ field.field_type.value }}{% if field.aliases %} · aliases: {{ field.aliases|join(", ") }}{% endif %}</small>
-                    </span>
-                    <span class="{% if field.required and not field.value %}field-missing{% endif %}">
-                      {% if field.value %}Filled{% elif field.required %}Missing{% else %}Optional{% endif %}
-                    </span>
-                  </li>
-                {% endfor %}
-              </ul>
-            </section>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="muted">No document templates yet.</p>
-      {% endif %}
-    </article>
+            </div>
+
+            {% if view.tags_found %}
+              <div class="tag-table">
+                <h4>Tags in this document</h4>
+                <table>
+                  <thead><tr><th>Tag</th><th>Field</th><th>Source</th><th>Status</th></tr></thead>
+                  <tbody>
+                    {% for tag in view.tags_found %}
+                      {% set matched = template.fields|selectattr('key', 'equalto', tag)|list|first %}
+                      {% set is_builtin = tag in view.builtin_keys %}
+                      <tr>
+                        <td><code>{{ '{{ ' ~ tag ~ ' }}' }}</code></td>
+                        <td>
+                          {% if matched %}{{ matched.label }}<br><small class="muted">{{ matched.field_type.value }}</small>
+                          {% elif is_builtin %}<em class="muted">built-in</em>
+                          {% else %}<em class="muted">unmapped</em>{% endif %}
+                        </td>
+                        <td>{% if matched %}{{ matched.value or '—' }}{% elif is_builtin %}—{% else %}—{% endif %}</td>
+                        <td>
+                          {% if is_builtin %}<span class="chip-muted">Auto</span>
+                          {% elif not matched %}<span class="chip-warning">No field</span>
+                          {% elif matched.value %}<span class="chip-success">Filled</span>
+                          {% elif matched.required %}<span class="chip-danger">Missing</span>
+                          {% else %}<span class="chip-muted">Optional</span>{% endif %}
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                {% if view.fields_unused %}
+                  <p class="muted">Defined but not used by this document: {{ view.fields_unused|map(attribute='key')|join(', ') }}</p>
+                {% endif %}
+              </div>
+            {% endif %}
+
+            <details class="field-editor">
+              <summary>Edit fields ({{ template.fields|length }})</summary>
+              <form method="post" action="{{ request.url_for('document_template_update_fields', slug=template.slug) }}" class="form-grid">
+                <label class="full-span">
+                  <small class="muted">One per line: <code>key|label|type|aliases|required/optional|value</code> · types: <code>string</code>, <code>excel_cell</code>, <code>excel_table</code></small>
+                  <textarea name="fields_text" rows="{{ [template.fields|length + 1, 4]|max }}">{{ view.fields_text }}</textarea>
+                </label>
+                <div class="full-span actions-row">
+                  <button class="button" type="submit">Save fields</button>
+                </div>
+              </form>
+            </details>
+
+            <form method="post" action="{{ request.url_for('document_template_delete', slug=template.slug) }}" class="inline-form danger-line">
+              <button class="button button-danger button-subtle" type="submit" onclick="return confirm('Delete this document template? The .docx file is removed too.')">Delete template</button>
+            </form>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">No document templates yet. Create one below.</p>
+    {% endif %}
   </section>
 
   <section class="grid-two">
@@ -112,12 +146,12 @@
         </label>
         <label class="full-span">
           Description
-          <textarea name="description" rows="3"></textarea>
+          <textarea name="description" rows="2"></textarea>
         </label>
         <label class="full-span">
           Fields
-          <textarea name="fields_text" rows="10" placeholder="part_number|Part Number|string|PN,Item Number|required|&#10;bom_table|BOM Table|excel_table|Bill of Materials|required|&#10;unit_price|Unit Price|excel_cell|Cost,Price|optional|"></textarea>
-          <small class="field-hint">One field per line: key|label|type|string aliases|required/optional|value. Types: string, excel_table, excel_cell.</small>
+          <textarea name="fields_text" rows="6" placeholder="part_number|Part Number|string|PN,Item Number|required|&#10;supplier_name|Supplier|string|Vendor|required|&#10;quoted_price|Quoted Price|excel_cell|Cost|required|"></textarea>
+          <small class="muted">After creating, upload the matching <code>.docx</code> from the list above.</small>
         </label>
         <div class="full-span">
           <button class="button button-primary" type="submit">Create document template</button>
@@ -128,7 +162,7 @@
     <article class="card">
       <div class="section-heading">
         <h2>Field homologation</h2>
-        <p class="muted">Canonical keys group equivalent labels across document templates.</p>
+        <p class="muted">Canonical keys group equivalent labels across documents.</p>
       </div>
       {% if canonical_fields %}
         <ul class="field-list">
@@ -146,5 +180,51 @@
         <p class="muted">Canonical field groups appear after you create document templates.</p>
       {% endif %}
     </article>
+  </section>
+
+  <section class="card">
+    <div class="section-heading">
+      <h2>Project templates</h2>
+      <p class="muted">{{ project_templates|length }} available</p>
+    </div>
+    {% if project_templates %}
+      <ul class="simple-list template-list">
+        {% for template in project_templates %}
+          <li>
+            <span>
+              <strong>{{ template.name }}</strong>
+              <small>{{ template.description or "No notes" }}</small>
+            </span>
+            <span>{{ template.created_at | when }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Open a project and use Save as template to create the first project template.</p>
+    {% endif %}
+
+    <div class="section-divider"></div>
+
+    <form class="form-grid" method="post" action="{{ request.url_for('project_template_create') }}">
+      <label>
+        Source project
+        <select name="project_slug" required>
+          {% for project in projects %}
+            <option value="{{ project.slug }}">{{ project.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Template name
+        <input type="text" name="name" required>
+      </label>
+      <label class="full-span">
+        Notes
+        <textarea name="description" rows="2"></textarea>
+      </label>
+      <div class="full-span">
+        <button class="button" type="submit">Create project template</button>
+      </div>
+    </form>
   </section>
 {% endblock %}

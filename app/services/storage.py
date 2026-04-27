@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
+import zipfile
 from datetime import date, datetime
 from pathlib import Path
 
@@ -171,6 +173,80 @@ class StorageService:
             dumps_pretty(template.model_dump(mode="json")),
             encoding="utf-8",
         )
+
+    def load_document_template(self, slug: str) -> DocumentTemplate:
+        path = self.config.document_templates_dir / f"{slug}.json"
+        if not path.exists():
+            raise FileNotFoundError(slug)
+        return DocumentTemplate.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+    def delete_document_template(self, slug: str) -> None:
+        json_path = self.config.document_templates_dir / f"{slug}.json"
+        if json_path.exists():
+            json_path.unlink()
+        assets_dir = self.config.document_templates_dir / slug
+        if assets_dir.exists():
+            shutil.rmtree(assets_dir)
+
+    def document_template_assets_dir(self, slug: str) -> Path:
+        return self.config.document_templates_dir / slug
+
+    def document_template_docx_path(self, template: DocumentTemplate) -> Path | None:
+        if not template.docx_filename:
+            return None
+        path = self.document_template_assets_dir(template.slug) / template.docx_filename
+        return path if path.exists() else None
+
+    def save_document_template_file(self, slug: str, filename: str, data: bytes) -> DocumentTemplate:
+        template = self.load_document_template(slug)
+        assets_dir = self.document_template_assets_dir(slug)
+        assets_dir.mkdir(parents=True, exist_ok=True)
+        # remove any previous .docx so the directory holds a single template file
+        for existing in assets_dir.glob("*.docx"):
+            existing.unlink()
+        safe_name = filename.replace("\\", "_").replace("/", "_") or "template.docx"
+        if not safe_name.lower().endswith(".docx"):
+            safe_name += ".docx"
+        (assets_dir / safe_name).write_bytes(data)
+        template.docx_filename = safe_name
+        self.save_document_template(template)
+        return template
+
+    def remove_document_template_file(self, slug: str) -> DocumentTemplate:
+        template = self.load_document_template(slug)
+        assets_dir = self.document_template_assets_dir(slug)
+        if assets_dir.exists():
+            for existing in assets_dir.glob("*.docx"):
+                existing.unlink()
+        template.docx_filename = None
+        self.save_document_template(template)
+        return template
+
+    def render_document_template(self, slug: str, project_slug: str) -> tuple[bytes, str]:
+        from io import BytesIO
+
+        try:
+            from docxtpl import DocxTemplate
+        except ImportError as exc:  # pragma: no cover - optional dep
+            raise RuntimeError(
+                "Install the 'docx' optional dependency: python -m pip install -e \".[docx]\""
+            ) from exc
+
+        template = self.load_document_template(slug)
+        docx_path = self.document_template_docx_path(template)
+        if docx_path is None:
+            raise FileNotFoundError("Upload a .docx file before rendering this template.")
+
+        loaded = self.load_project(project_slug)
+        context = build_render_context(template, loaded.project)
+
+        doc = DocxTemplate(str(docx_path))
+        doc.render(context)
+        buffer = BytesIO()
+        doc.save(buffer)
+
+        base = template.slug
+        return buffer.getvalue(), f"{base}__{loaded.project.slug}.docx"
 
     def archive_project(self, slug: str, note: str = "") -> Addendum:
         loaded = self.load_project(slug)
@@ -432,7 +508,7 @@ class StorageService:
             ),
             None,
         )
-        roadblock_count = sum(1 for task in project.tasks if task.blocked or task.column == "Blocked")
+        roadblock_count = sum(1 for task in project.tasks if task.column == "Blocked")
         recent_at = loaded.addendums[0].created_at if loaded.addendums else None
         return DashboardProject(
             slug=project.slug,
@@ -489,3 +565,67 @@ class StorageService:
         target_path = self._project_dir(target.slug) / source.logo_path
         target_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source_logo, target_path)
+
+
+DOCX_VAR_RE = re.compile(r"\{\{\s*([A-Za-z_][\w]*)(?:\.[\w]+)*\s*(?:\|[^}]*)?\s*\}\}")
+DOCX_FOR_RE = re.compile(r"\{%\s*for\s+\w+\s+in\s+([A-Za-z_][\w]*)\s*%\}")
+
+
+def inspect_docx_tags(docx_path: Path) -> list[str]:
+    """Return the unique top-level Jinja variable names referenced inside a .docx.
+
+    Captures both `{{ key }}` substitutions and the iterable name in `{% for x in items %}` loops.
+    Loop-bound names (`x`) are excluded.
+    """
+    if not docx_path.exists():
+        return []
+    found: set[str] = set()
+    loop_vars: set[str] = set()
+    try:
+        with zipfile.ZipFile(docx_path) as zf:
+            for name in zf.namelist():
+                if not name.endswith(".xml"):
+                    continue
+                try:
+                    text = zf.read(name).decode("utf-8", errors="ignore")
+                except KeyError:
+                    continue
+                # Word can split a placeholder across multiple <w:t> runs; strip XML tags first.
+                clean = re.sub(r"<[^>]+>", "", text)
+                for match in DOCX_VAR_RE.finditer(clean):
+                    found.add(match.group(1))
+                for match in re.finditer(r"\{%\s*for\s+(\w+)\s+in\s+([A-Za-z_][\w]*)\s*%\}", clean):
+                    loop_vars.add(match.group(1))
+                    found.add(match.group(2))
+    except zipfile.BadZipFile:
+        return []
+    return sorted(found - loop_vars)
+
+
+def build_render_context(template: DocumentTemplate, project: Project) -> dict[str, object]:
+    """Context dict for docxtpl rendering — fields first, then project metadata as fallback."""
+    today = date.today()
+    context: dict[str, object] = {
+        "project_name": project.name,
+        "project_description": project.description,
+        "project_status": project.status.value,
+        "project_health": project.health.value,
+        "project_start_date": project.start_date.isoformat() if project.start_date else "",
+        "project_end_date": project.end_date.isoformat() if project.end_date else "",
+        "today": today.isoformat(),
+        "people": [
+            {"name": p.name, "email": p.email, "role": p.role}
+            for p in project.people
+        ],
+        "milestones": [
+            {
+                "title": m.title,
+                "status": m.status.value,
+                "target_date": m.target_date.isoformat() if m.target_date else "",
+            }
+            for m in project.milestones
+        ],
+    }
+    for field in template.fields:
+        context[field.key] = field.value
+    return context

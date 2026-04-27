@@ -62,7 +62,7 @@ class ExportService:
             logo_data_uri=self._logo_data_uri(loaded.project),
             sections=loaded.sections,
             timeline_text=loaded.timeline_text,
-            blocked_tasks=[task for task in loaded.project.tasks if task.blocked or task.column == "Blocked"],
+            blocked_tasks=[task for task in loaded.project.tasks if task.column == "Blocked"],
             upcoming_milestones=sorted(
                 [item for item in loaded.project.milestones if item.target_date],
                 key=lambda item: item.target_date or date.max,
@@ -131,7 +131,7 @@ class ExportService:
                     f"Dates: {loaded.project.start_date or '-'} to {loaded.project.end_date or '-'}",
                     f"People: {len(loaded.project.people)}",
                     f"Milestones: {len(loaded.project.milestones)}",
-                    f"Blocked tasks: {sum(1 for task in loaded.project.tasks if task.blocked or task.column == 'Blocked')}",
+                    f"Blocked tasks: {sum(1 for task in loaded.project.tasks if task.column == 'Blocked')}",
                 ]:
                     body.add_paragraph().text = line
 

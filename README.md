@@ -4,23 +4,27 @@ ProjStatus is a local-first project management app built with Python and FastAPI
 
 ## Features
 
-- Portfolio dashboard for project health, milestones, blocked work, and recent updates
-- Project workspace with overview, kanban board, timeline, people directory, access links, sections, and history
-- Local file editing support for JSON, Markdown, and structured Mermaid timelines
-- Automatic addendums on every save with snapshot history and restore actions
+- Portfolio dashboard with three views (Cards, Gantt with month axis, Table)
+- Project workspace with **Summary / Plan / People / Notes / History** tabs and a chrome-free **Present** mode
+- Kanban board with drag-and-drop and a side-panel task editor
+- Mermaid timeline with two-way sync of titles, dates, and status keywords
+- Word document templates: upload a `.docx`, write `{{ tag }}` placeholders, render filled copies for any project
+- Automatic addendum history on every save with one-click restore
 - Batch exports to standalone HTML, PNG, and PPTX summary decks
 
-For workflow instructions and document tag examples, see [USER_GUIDE.md](USER_GUIDE.md).
+For tag syntax and screen-by-screen workflow, see [USER_GUIDE.md](USER_GUIDE.md).
 
 ## Run
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\activate
-python -m pip install -e ".[dev,exports]"
+python -m pip install -e ".[dev,docx,exports]"
 python -m playwright install chromium
 python -m uvicorn app.main:app --reload
 ```
+
+`docx` enables Word document filling, `exports` enables PNG export. Both are optional.
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
