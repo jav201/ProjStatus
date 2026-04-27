@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Templates | ProjStatus{% endblock %}
+
+{% block content %}
+  <section class="page-heading">
+    <div>
+      <p class="eyebrow">Templates</p>
+      <h1>Reuse project structures and document field maps.</h1>
+      <p class="hero-copy">Project templates create new workspaces from proven structures. Document templates track required tags, aliases, and completion.</p>
+    </div>
+    <a class="button button-primary" href="{{ request.url_for('project_new') }}">Create from template</a>
+  </section>
+
+  <section class="grid-two">
+    <article class="card">
+      <div class="section-heading">
+        <h2>Project templates</h2>
+        <p class="muted">{{ project_templates|length }} available</p>
+      </div>
+      {% if project_templates %}
+        <ul class="simple-list template-list">
+          {% for template in project_templates %}
+            <li>
+              <span>
+                <strong>{{ template.name }}</strong>
+                <small>{{ template.description or "No notes" }}</small>
+              </span>
+              <span>{{ template.created_at }}</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">Open a project and use Save as template to create the first project template.</p>
+      {% endif %}
+
+      <div class="section-divider"></div>
+
+      <form class="form-grid" method="post" action="{{ request.url_for('project_template_create') }}">
+        <label class="full-span">
+          Source project
+          <select name="project_slug" required>
+            {% for project in projects %}
+              <option value="{{ project.slug }}">{{ project.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="full-span">
+          Template name
+          <input type="text" name="name" required>
+        </label>
+        <label class="full-span">
+          Template notes
+          <textarea name="description" rows="3"></textarea>
+        </label>
+        <div class="full-span">
+          <button class="button button-primary" type="submit">Create project template</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="card">
+      <div class="section-heading">
+        <h2>Document templates</h2>
+        <p class="muted">{{ document_templates|length }} available</p>
+      </div>
+      {% if document_templates %}
+        <div class="stack compact">
+          {% for template in document_templates %}
+            <section class="template-card">
+              <div class="section-heading">
+                <div>
+                  <h3>{{ template.name }}</h3>
+                  <p class="muted">{{ template.description or "No notes" }}</p>
+                </div>
+                <span class="completion-ring">{{ template.completion_percent }}%</span>
+              </div>
+              {% if template.missing_fields %}
+                <p class="alert-line warning">Missing: {{ template.missing_fields|map(attribute='label')|join(", ") }}</p>
+              {% else %}
+                <p class="alert-line">All required fields are filled.</p>
+              {% endif %}
+              <ul class="field-list">
+                {% for field in template.fields %}
+                  <li>
+                    <span>
+                      <strong>{{ field.label }}</strong>
+                      <small>{{ field.key }} · {{ field.field_type.value }}{% if field.aliases %} · aliases: {{ field.aliases|join(", ") }}{% endif %}</small>
+                    </span>
+                    <span class="{% if field.required and not field.value %}field-missing{% endif %}">
+                      {% if field.value %}Filled{% elif field.required %}Missing{% else %}Optional{% endif %}
+                    </span>
+                  </li>
+                {% endfor %}
+              </ul>
+            </section>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted">No document templates yet.</p>
+      {% endif %}
+    </article>
+  </section>
+
+  <section class="grid-two">
+    <article class="card">
+      <h2>Create document template</h2>
+      <form class="form-grid" method="post" action="{{ request.url_for('document_template_create') }}">
+        <label class="full-span">
+          Template name
+          <input type="text" name="name" required>
+        </label>
+        <label class="full-span">
+          Description
+          <textarea name="description" rows="3"></textarea>
+        </label>
+        <label class="full-span">
+          Fields
+          <textarea name="fields_text" rows="10" placeholder="part_number|Part Number|string|PN,Item Number|required|&#10;bom_table|BOM Table|excel_table|Bill of Materials|required|&#10;unit_price|Unit Price|excel_cell|Cost,Price|optional|"></textarea>
+          <small class="field-hint">One field per line: key|label|type|string aliases|required/optional|value. Types: string, excel_table, excel_cell.</small>
+        </label>
+        <div class="full-span">
+          <button class="button button-primary" type="submit">Create document template</button>
+        </div>
+      </form>
+    </article>
+
+    <article class="card">
+      <div class="section-heading">
+        <h2>Field homologation</h2>
+        <p class="muted">Canonical keys group equivalent labels across document templates.</p>
+      </div>
+      {% if canonical_fields %}
+        <ul class="field-list">
+          {% for field in canonical_fields %}
+            <li>
+              <span>
+                <strong>{{ field.key }}</strong>
+                <small>Labels: {{ field.labels|join(", ") }}{% if field.aliases %} · Aliases: {{ field.aliases|join(", ") }}{% endif %}</small>
+              </span>
+              <span>{{ field.documents|length }} docs · {{ field.missing_count }} missing</span>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">Canonical field groups appear after you create document templates.</p>
+      {% endif %}
+    </article>
+  </section>
+{% endblock %}
