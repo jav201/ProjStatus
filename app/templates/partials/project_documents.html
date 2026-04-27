@@ -1,0 +1,87 @@
+<section class="card">
+  <div class="section-heading">
+    <div>
+      <h2>Documents</h2>
+      <p class="muted">Word document templates filled with this project's data. Dictionary entries override template defaults; built-in tags resolve automatically.</p>
+    </div>
+  </div>
+
+  {% if document_views %}
+    <div class="stack">
+      {% for view in document_views %}
+        {% set template = view.template %}
+        {% set counts = view.counts %}
+        <article class="document-template">
+          <header class="document-template__header">
+            <div>
+              <h3>{{ template.name }}</h3>
+              <p class="muted">{{ template.description or "No notes" }}</p>
+            </div>
+            {% if view.has_docx and counts.total_non_builtin %}
+              {% set declared_pct = (counts.declared * 100 // counts.total_non_builtin) %}
+              <span class="completion-pill" data-pct="{{ declared_pct }}" title="{{ counts.declared }} declared · {{ counts.template_default }} template default · {{ counts.missing }} missing · {{ counts.builtin }} built-in">
+                {{ counts.declared }} / {{ counts.total_non_builtin }} declared
+              </span>
+            {% endif %}
+          </header>
+
+          <div class="document-template__file">
+            {% if view.has_docx %}
+              <p>
+                <strong>📎 {{ template.docx_filename }}</strong>
+                {% if view.tag_rows %}
+                  <span class="muted">· {{ view.tag_rows|length }} tag{{ '' if view.tag_rows|length == 1 else 's' }} found</span>
+                {% else %}
+                  <span class="alert-line warning">No <code>{{ '{{ … }}' }}</code> tags detected — check your Word file.</span>
+                {% endif %}
+              </p>
+              <div class="actions-row">
+                <form method="post" action="{{ request.url_for('document_template_render', slug=template.slug) }}">
+                  <input type="hidden" name="project_slug" value="{{ project.slug }}">
+                  <button class="button button-primary" type="submit">Download filled</button>
+                </form>
+                <a class="button button-subtle" href="{{ request.url_for('templates') }}">Edit template →</a>
+              </div>
+            {% else %}
+              <p class="muted">No Word file uploaded yet. <a href="{{ request.url_for('templates') }}">Upload one →</a></p>
+            {% endif %}
+          </div>
+
+          {% if view.tag_rows %}
+            <div class="tag-table">
+              <h4>Tags in this document</h4>
+              <table>
+                <thead><tr><th>Tag</th><th>Status</th><th>Source value</th><th>Action</th></tr></thead>
+                <tbody>
+                  {% for row in view.tag_rows %}
+                    <tr>
+                      <td><code>{{ '{{ ' ~ row.tag ~ ' }}' }}</code></td>
+                      <td>
+                        {% if row.status == 'declared' %}<span class="chip-success">Declared</span>
+                        {% elif row.status == 'builtin' %}<span class="chip-muted">Built-in</span>
+                        {% elif row.status == 'template_default' %}<span class="chip-muted">Template default</span>
+                        {% else %}<span class="chip-danger">Missing</span>{% endif %}
+                      </td>
+                      <td>
+                        {% if row.status == 'builtin' %}<em class="muted">auto</em>
+                        {% elif row.source %}{{ row.source }}
+                        {% else %}—{% endif %}
+                      </td>
+                      <td>
+                        {% if row.status == 'missing' %}
+                          <a href="{{ request.url_for('project_dictionary', slug=project.slug) }}?prefill_key={{ row.tag }}">Declare →</a>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% endif %}
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">No document templates yet. <a href="{{ request.url_for('templates') }}">Create one →</a></p>
+  {% endif %}
+</section>

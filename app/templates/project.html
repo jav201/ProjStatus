@@ -104,6 +104,7 @@
       <a class="{% if is_plan %}active{% endif %}" href="{{ request.url_for('project_board', slug=project.slug) }}">Plan</a>
       <a class="{% if active_tab == 'people' %}active{% endif %}" href="{{ request.url_for('project_people', slug=project.slug) }}">People</a>
       <a class="{% if active_tab == 'dictionary' %}active{% endif %}" href="{{ request.url_for('project_dictionary', slug=project.slug) }}">Dictionary</a>
+      <a class="{% if active_tab == 'documents' %}active{% endif %}" href="{{ request.url_for('project_documents', slug=project.slug) }}">Documents</a>
       <a class="{% if is_notes %}active{% endif %}" href="{{ request.url_for('project_section', slug=project.slug, section='content') }}">Notes</a>
       <span class="tabs-spacer"></span>
       <a class="{% if active_tab == 'history' %}active{% endif %}" href="{{ request.url_for('project_history', slug=project.slug) }}">History</a>
