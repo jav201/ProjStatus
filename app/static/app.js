@@ -279,8 +279,10 @@ function initializeTaskSidePanel() {
       form.elements.notes.value = data.notes || "";
       form.elements.change_note.value = "";
       const assignees = new Set(data.assignee_ids || []);
-      Array.from(form.elements.assignee_ids.options).forEach((option) => {
-        option.selected = assignees.has(option.value);
+      // assignee_ids is a NodeList of checkboxes (RadioNodeList when multiple match)
+      const checkboxes = form.querySelectorAll('input[type="checkbox"][name="assignee_ids"]');
+      checkboxes.forEach((box) => {
+        box.checked = assignees.has(box.value);
       });
       deleteBtn.dataset.url = card.dataset.deleteUrl;
       panel.classList.add("is-open");
