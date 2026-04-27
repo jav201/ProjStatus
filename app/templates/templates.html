@@ -139,6 +139,20 @@
   <section class="grid-two">
     <article class="card">
       <h2>Create document template</h2>
+
+      <details class="hint">
+        <summary><strong>Field syntax &amp; examples</strong></summary>
+        <p>One line per field, with six pipe-separated parts. Empty parts are allowed (just leave them blank between two <code>|</code>).</p>
+        <pre class="hint-code">key | label | type | aliases | required/optional | value</pre>
+        <ul>
+          <li><strong>type = <code>string</code></strong> — plain text. Value is anything: <code>ABC-12345</code>, <code>Acme Corp</code>, etc.</li>
+          <li><strong>type = <code>excel_cell</code></strong> — a single cell reference of the form <code>FileName.xlsx!Sheet1!B12</code> (or just <code>FileName.xlsx!B12</code> if there is one sheet). Example value: <code>Quote.xlsx!B12</code>.</li>
+          <li><strong>type = <code>excel_table</code></strong> — a rectangular range of the form <code>FileName.xlsx!A1:H40</code>. Example value: <code>BOM.xlsx!A1:H40</code>.</li>
+        </ul>
+        <p><strong>aliases</strong> lists alternate column names other documents use for the same field, separated by commas (e.g. <code>PN,Item Number</code>). Used by the field-homologation panel.</p>
+        <p><strong>required</strong> means the field counts toward completion. Use <code>optional</code> for ignore-if-blank.</p>
+      </details>
+
       <form class="form-grid" method="post" action="{{ request.url_for('document_template_create') }}">
         <label class="full-span">
           Template name
@@ -150,8 +164,8 @@
         </label>
         <label class="full-span">
           Fields
-          <textarea name="fields_text" rows="6" placeholder="part_number|Part Number|string|PN,Item Number|required|&#10;supplier_name|Supplier|string|Vendor|required|&#10;quoted_price|Quoted Price|excel_cell|Cost|required|"></textarea>
-          <small class="muted">After creating, upload the matching <code>.docx</code> from the list above.</small>
+          <textarea name="fields_text" rows="8" placeholder="part_number|Part Number|string|PN,Item Number|required|&#10;supplier_name|Supplier|string|Vendor|required|&#10;quoted_price|Quoted Price|excel_cell|Cost|required|Quote.xlsx!B12&#10;bom_table|Bill of Materials|excel_table|BOM|required|BOM.xlsx!A1:H40&#10;notes|Internal notes|string||optional|"></textarea>
+          <small class="muted">One field per line, separated by <code>|</code>: <code>key | label | type | aliases | required/optional | value</code>. After creating, upload the matching <code>.docx</code> from the list above.</small>
         </label>
         <div class="full-span">
           <button class="button button-primary" type="submit">Create document template</button>

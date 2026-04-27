@@ -703,4 +703,8 @@ def build_render_context(template: DocumentTemplate, project: Project) -> dict[s
     }
     for field in template.fields:
         context[field.key] = field.value
+    # project dictionary overrides template defaults (per-project values for tags)
+    for entry in project.dictionary:
+        if entry.key:
+            context[entry.key] = entry.value
     return context
