@@ -1,7 +1,42 @@
 <section class="card">
   <div class="section-heading">
-    <h2>Kanban board</h2>
-    <p class="muted">Drag cards between columns. Sortable updates the JSON model and Mermaid timeline order.</p>
+    <div>
+      <h2>Kanban board</h2>
+      <p class="muted">Drag cards between columns. Click a card to edit it.</p>
+    </div>
+    <details class="menu">
+      <summary class="button button-primary">+ Add task</summary>
+      <div class="menu-panel" style="right: 0; min-width: 320px; padding: 14px;">
+        <form class="form-grid" method="post" action="{{ request.url_for('task_create', slug=project.slug) }}">
+          <label class="full-span">Title<input type="text" name="title" required></label>
+          <label class="full-span">Description<textarea name="description" rows="2"></textarea></label>
+          <label>Column
+            <select name="column">
+              {% for column in project.board_columns %}<option value="{{ column }}">{{ column }}</option>{% endfor %}
+            </select>
+          </label>
+          <label>Priority
+            <select name="priority">
+              {% for value in ['low','medium','high','critical'] %}<option value="{{ value }}">{{ value }}</option>{% endfor %}
+            </select>
+          </label>
+          <label>Start<input type="date" name="start_date"></label>
+          <label>Due<input type="date" name="due_date"></label>
+          <label class="full-span">Milestone
+            <select name="milestone_id">
+              <option value="">No milestone</option>
+              {% for milestone in project.milestones %}<option value="{{ milestone.id }}">{{ milestone.title }}</option>{% endfor %}
+            </select>
+          </label>
+          <label class="full-span">Assignees
+            <select name="assignee_ids" multiple size="3">
+              {% for person in project.people %}<option value="{{ person.id }}">{{ person.name }}</option>{% endfor %}
+            </select>
+          </label>
+          <div class="full-span"><button class="button button-primary" type="submit">Add task</button></div>
+        </form>
+      </div>
+    </details>
   </div>
   <div class="board-grid">
     {% for column, tasks in tasks_by_column.items() %}
@@ -12,140 +47,84 @@
         </header>
         <div class="task-lane" data-column="{{ column }}">
           {% for task in tasks %}
-            <div class="task-card" data-task-id="{{ task.id }}">
+            <button type="button" class="task-card" data-task-id="{{ task.id }}" data-edit-url="{{ request.url_for('task_update', slug=project.slug, task_id=task.id) }}" data-delete-url="{{ request.url_for('task_delete', slug=project.slug, task_id=task.id) }}">
               <strong>{{ task.title }}</strong>
-              <p>{{ task.description or task.notes or "No detail yet." }}</p>
+              {% if task.description %}<p class="task-desc">{{ task.description }}</p>{% endif %}
               <div class="chip-row">
-                <span>{{ task.priority.value }}</span>
-                <span>{{ task.due_date or "-" }}</span>
-                {% if task.blocked %}<span class="chip-danger">Blocked</span>{% endif %}
+                <span class="chip-priority chip-priority-{{ task.priority.value }}">{{ task.priority.value }}</span>
+                {% if task.due_date %}<span class="chip-muted">{{ task.due_date }}</span>{% endif %}
+                {% if task.milestone_id and milestone_map.get(task.milestone_id) %}
+                  <span class="milestone-tag">◆ {{ milestone_map[task.milestone_id].title }}</span>
+                {% endif %}
               </div>
-            </div>
+              {% if task.assignee_ids %}
+                <div class="assignee-row">
+                  {% for pid in task.assignee_ids %}
+                    {% if people_map.get(pid) %}<span class="assignee-chip" title="{{ people_map[pid].name }}">{{ people_map[pid].name.split()[0][:1] ~ (people_map[pid].name.split()[1][:1] if people_map[pid].name.split()|length > 1 else '') }}</span>{% endif %}
+                  {% endfor %}
+                </div>
+              {% endif %}
+              {# embed task data for the side panel JS #}
+              <script type="application/json" class="task-data">
+                {
+                  "title": {{ task.title|tojson }},
+                  "description": {{ task.description|tojson }},
+                  "column": {{ task.column|tojson }},
+                  "priority": {{ task.priority.value|tojson }},
+                  "start_date": {{ (format_date(task.start_date) or "")|tojson }},
+                  "due_date": {{ (format_date(task.due_date) or "")|tojson }},
+                  "milestone_id": {{ (task.milestone_id or "")|tojson }},
+                  "assignee_ids": {{ task.assignee_ids|tojson }},
+                  "notes": {{ task.notes|tojson }}
+                }
+              </script>
+            </button>
           {% endfor %}
+          {% if not tasks %}<p class="muted lane-empty">—</p>{% endif %}
         </div>
       </article>
     {% endfor %}
   </div>
 </section>
 
-<section class="grid-two">
-  <article class="card">
-    <h2>Add task</h2>
-    <form class="form-grid" method="post" action="{{ request.url_for('task_create', slug=project.slug) }}">
-      <label class="full-span">
-        Title
-        <input type="text" name="title" required>
-      </label>
-      <label class="full-span">
-        Description
-        <textarea name="description" rows="3"></textarea>
-      </label>
-      <label>
-        Column
-        <select name="column">
-          {% for column in project.board_columns %}
-            <option value="{{ column }}">{{ column }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>
-        Priority
-        <select name="priority">
-          {% for value in ['low', 'medium', 'high', 'critical'] %}
-            <option value="{{ value }}">{{ value }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>
-        Start date
-        <input type="date" name="start_date">
-      </label>
-      <label>
-        Due date
-        <input type="date" name="due_date">
-      </label>
-      <label>
-        Milestone
-        <select name="milestone_id">
-          <option value="">No milestone</option>
-          {% for milestone in project.milestones %}
-            <option value="{{ milestone.id }}">{{ milestone.title }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>
-        Assignees
-        <select name="assignee_ids" multiple size="4">
-          {% for person in project.people %}
-            <option value="{{ person.id }}">{{ person.name }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label class="full-span checkbox-row">
-        <input type="checkbox" name="blocked">
-        Mark as blocked
-      </label>
-      <label class="full-span">
-        Notes
-        <input type="text" name="notes">
-      </label>
-      <label class="full-span">
-        Addendum note
-        <input type="text" name="change_note">
-      </label>
-      <div class="full-span">
-        <button class="button button-primary" type="submit">Add task</button>
-      </div>
-    </form>
-  </article>
-
-  <article class="card">
-    <h2>Task editor</h2>
-    {% if all_tasks %}
-      <div class="table-stack">
-        {% for task in all_tasks %}
-          <form class="grid-row grid-row-task" method="post" action="{{ request.url_for('task_update', slug=project.slug, task_id=task.id) }}">
-            <input type="text" name="title" value="{{ task.title }}" required>
-            <select name="column">
-              {% for column in project.board_columns %}
-                <option value="{{ column }}" {% if task.column == column %}selected{% endif %}>{{ column }}</option>
-              {% endfor %}
-            </select>
-            <select name="priority">
-              {% for value in ['low', 'medium', 'high', 'critical'] %}
-                <option value="{{ value }}" {% if task.priority.value == value %}selected{% endif %}>{{ value }}</option>
-              {% endfor %}
-            </select>
-            <input type="date" name="start_date" value="{{ format_date(task.start_date) }}">
-            <input type="date" name="due_date" value="{{ format_date(task.due_date) }}">
-            <select name="milestone_id">
-              <option value="">No milestone</option>
-              {% for milestone in project.milestones %}
-                <option value="{{ milestone.id }}" {% if task.milestone_id == milestone.id %}selected{% endif %}>{{ milestone.title }}</option>
-              {% endfor %}
-            </select>
-            <select name="assignee_ids" multiple size="3">
-              {% for person in project.people %}
-                <option value="{{ person.id }}" {% if person.id in task.assignee_ids %}selected{% endif %}>{{ person.name }}</option>
-              {% endfor %}
-            </select>
-            <input type="text" name="description" value="{{ task.description }}" placeholder="Description">
-            <input type="text" name="notes" value="{{ task.notes }}" placeholder="Notes">
-            <label class="checkbox-row small">
-              <input type="checkbox" name="blocked" {% if task.blocked %}checked{% endif %}>
-              Blocked
-            </label>
-            <input type="text" name="change_note" placeholder="Addendum note">
-            <button class="button" type="submit">Save</button>
-          </form>
-          <form class="inline-delete" method="post" action="{{ request.url_for('task_delete', slug=project.slug, task_id=task.id) }}">
-            <input type="hidden" name="change_note" value="Removed task {{ task.title }}">
-            <button class="button button-danger" type="submit">Delete</button>
-          </form>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p class="muted">No tasks yet.</p>
-    {% endif %}
-  </article>
-</section>
+{# side panel for editing — populated by app.js #}
+<div class="task-side-panel-backdrop" data-task-panel-backdrop></div>
+<aside class="task-side-panel" data-task-panel aria-hidden="true">
+  <div class="section-heading">
+    <h2>Edit task</h2>
+    <button type="button" class="button button-subtle" data-task-panel-close>Close</button>
+  </div>
+  <form class="form-grid" method="post" data-task-form>
+    <label class="full-span">Title<input type="text" name="title" required></label>
+    <label class="full-span">Description<textarea name="description" rows="3"></textarea></label>
+    <label>Column
+      <select name="column">
+        {% for column in project.board_columns %}<option value="{{ column }}">{{ column }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Priority
+      <select name="priority">
+        {% for value in ['low','medium','high','critical'] %}<option value="{{ value }}">{{ value }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Start date<input type="date" name="start_date"></label>
+    <label>Due date<input type="date" name="due_date"></label>
+    <label class="full-span">Milestone
+      <select name="milestone_id">
+        <option value="">No milestone</option>
+        {% for milestone in project.milestones %}<option value="{{ milestone.id }}">{{ milestone.title }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="full-span">Assignees
+      <select name="assignee_ids" multiple size="4">
+        {% for person in project.people %}<option value="{{ person.id }}">{{ person.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="full-span">Notes<input type="text" name="notes"></label>
+    <label class="full-span">Addendum note<input type="text" name="change_note" placeholder="Why this change?"></label>
+    <div class="full-span actions-row">
+      <button class="button button-primary" type="submit">Save task</button>
+      <button class="button button-danger button-subtle" type="button" data-task-delete>Delete</button>
+    </div>
+  </form>
+</aside>

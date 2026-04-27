@@ -18,9 +18,13 @@ dependencies = [
 exports = [
     "playwright>=1.53.0,<2.0.0",
 ]
+docx = [
+    "docxtpl>=0.16.0,<1.0.0",
+]
 dev = [
     "httpx>=0.28.0,<1.0.0",
     "pytest>=8.3.0,<9.0.0",
+    "docxtpl>=0.16.0,<1.0.0",
 ]
 
 [tool.pytest.ini_options]

@@ -2,8 +2,14 @@
 
 {% block title %}{{ project.name }} | ProjStatus{% endblock %}
 
+{% block body_class %}{% if present_mode %}present-mode{% endif %}{% endblock %}
+
 {% block content %}
-  <section class="project-hero card">
+  {% set is_plan = active_tab in ('board', 'timeline') %}
+  {% set is_notes = active_tab == 'sections' %}
+  {% set health_class = 'health-' ~ project.health.value %}
+
+  <section class="project-hero card project-hero-compact">
     <div class="project-hero-main">
       <div class="logo-frame logo-frame-hero">
         {% if project_logo_url %}
@@ -14,30 +20,38 @@
       </div>
       <div class="project-hero-copy">
         <div class="project-card-title-row">
-          <p class="eyebrow">{{ project.health.value }} &middot; {{ project.status.value }}</p>
-          {% if project.archived %}
-            <span class="pill pill-muted">Archived</span>
-          {% endif %}
+          <span class="health-badge {{ health_class }}">{{ project.health.value }}</span>
+          <span class="muted">· {{ project.status.value }}{% if project.start_date or project.end_date %} · {{ project.start_date or '—' }} → {{ project.end_date or '—' }}{% endif %}</span>
+          {% if project.archived %}<span class="pill pill-muted">Archived</span>{% endif %}
         </div>
-        <h1>{{ project.name }}</h1>
-        <p class="hero-copy">{{ project.description or "No description yet." }}</p>
+        <h1 class="project-title">{{ project.name }}</h1>
+        {% if project.description %}<p class="hero-copy">{{ project.description }}</p>{% endif %}
       </div>
     </div>
-    <div class="hero-actions">
-      <div class="hero-meta">
-        <span class="hero-chip">Timeline <strong>{{ project.start_date or "-" }} to {{ project.end_date or "-" }}</strong></span>
-        {% if project.logo_path %}
-          <span class="hero-chip">Logo path <strong>{{ project.logo_path }}</strong></span>
-        {% endif %}
-      </div>
-      <div class="button-cluster">
-        <a class="button button-subtle" href="{{ request.url_for('project_view', slug=project.slug) }}">View mode</a>
-        <a class="button button-primary" href="{{ request.url_for('exports') }}?project={{ project.slug }}">Export</a>
-      </div>
+    <div class="project-header__actions">
+      {% if present_mode %}
+        <a class="button" href="{{ request.url_for('project_overview', slug=project.slug) }}">Exit present</a>
+      {% else %}
+        <a class="button button-primary" href="{{ request.url_for('project_view', slug=project.slug) }}">Present</a>
+      {% endif %}
+      <details class="menu">
+        <summary aria-label="More actions">⋯</summary>
+        <div class="menu-panel">
+          <a href="{{ request.url_for('exports') }}?project={{ project.slug }}">Export</a>
+          <a href="#edit-details">Edit details</a>
+          <a href="#save-as-template">Save as template</a>
+          <a href="#duplicate-project">Duplicate</a>
+          {% if project.archived %}
+            <form method="post" action="{{ request.url_for('project_unarchive', slug=project.slug) }}"><button class="link" type="submit">Restore</button></form>
+          {% else %}
+            <form method="post" action="{{ request.url_for('project_archive', slug=project.slug) }}"><button class="link" type="submit">Archive</button></form>
+          {% endif %}
+        </div>
+      </details>
     </div>
   </section>
 
-  {% if project.archived or sync_notice or validation_errors or import_summary %}
+  {% if not present_mode and (project.archived or sync_notice or validation_errors or import_summary) %}
     <section class="card alert-stack">
       {% if project.archived %}
         <p class="alert-line warning">This project is archived and hidden from the default dashboard until you enable archived items or unarchive it.</p>
@@ -54,15 +68,31 @@
     </section>
   {% endif %}
 
-  <nav class="tabs">
-    <a class="{% if active_tab == 'overview' %}active{% endif %}" href="{{ request.url_for('project_overview', slug=project.slug) }}">Overview</a>
-    <a class="{% if active_tab == 'view_mode' %}active{% endif %}" href="{{ request.url_for('project_view', slug=project.slug) }}">View Mode</a>
-    <a class="{% if active_tab == 'board' %}active{% endif %}" href="{{ request.url_for('project_board', slug=project.slug) }}">Board</a>
-    <a class="{% if active_tab == 'timeline' %}active{% endif %}" href="{{ request.url_for('project_timeline', slug=project.slug) }}">Timeline</a>
-    <a class="{% if active_tab == 'people_access' %}active{% endif %}" href="{{ request.url_for('project_people_access', slug=project.slug) }}">People &amp; Access</a>
-    <a class="{% if active_tab == 'sections' %}active{% endif %}" href="{{ request.url_for('project_section', slug=project.slug, section='content') }}">Sections</a>
-    <a class="{% if active_tab == 'history' %}active{% endif %}" href="{{ request.url_for('project_history', slug=project.slug) }}">History</a>
-  </nav>
+  {% if not present_mode %}
+    <nav class="tabs project-tabs">
+      <a class="{% if active_tab == 'overview' %}active{% endif %}" href="{{ request.url_for('project_overview', slug=project.slug) }}">Summary</a>
+      <a class="{% if is_plan %}active{% endif %}" href="{{ request.url_for('project_board', slug=project.slug) }}">Plan</a>
+      <a class="{% if active_tab == 'people_access' %}active{% endif %}" href="{{ request.url_for('project_people_access', slug=project.slug) }}">People</a>
+      <a class="{% if is_notes %}active{% endif %}" href="{{ request.url_for('project_section', slug=project.slug, section='content') }}">Notes</a>
+      <span class="tabs-spacer"></span>
+      <a class="{% if active_tab == 'history' %}active{% endif %}" href="{{ request.url_for('project_history', slug=project.slug) }}">History</a>
+    </nav>
+
+    {% if is_plan %}
+      <div class="segmented plan-toggle">
+        <a class="{% if active_tab == 'board' %}is-active{% endif %}" href="{{ request.url_for('project_board', slug=project.slug) }}">Board</a>
+        <a class="{% if active_tab == 'timeline' %}is-active{% endif %}" href="{{ request.url_for('project_timeline', slug=project.slug) }}">Gantt</a>
+      </div>
+    {% endif %}
+
+    {% if is_notes %}
+      <div class="segmented plan-toggle">
+        {% for section_key, section_label in [('content', 'Content'), ('change_requests', 'Change requests'), ('roadblocks', 'Roadblocks'), ('notes', 'Notes')] %}
+          <a class="{% if section_name == section_key %}is-active{% endif %}" href="{{ request.url_for('project_section', slug=project.slug, section=section_key) }}">{{ section_label }}</a>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endif %}
 
   {% include tab_template %}
 {% endblock %}
