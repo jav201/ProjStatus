@@ -67,6 +67,90 @@ def test_people_access_and_exports_pages_render(tmp_path: Path) -> None:
     assert "Executive snapshot" in project_view.text
 
 
+def test_dashboard_portfolio_views_render(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    client.post(
+        "/projects/new",
+        data={
+            "name": "Alpha Launch",
+            "description": "Build the launch plan",
+            "start_date": "2026-04-23",
+            "end_date": "2026-05-15",
+        },
+        follow_redirects=True,
+    )
+    client.post(
+        "/projects/alpha-launch/milestones",
+        data={"title": "Pilot", "target_date": "2026-05-01", "status": "active"},
+        follow_redirects=True,
+    )
+
+    gantt = client.get("/?view=gantt")
+    assert gantt.status_code == 200
+    assert "Portfolio Gantt" in gantt.text
+    assert "All project timelines" in gantt.text
+    assert "Alpha Launch" in gantt.text
+    assert "Pilot" in gantt.text
+
+    table = client.get("/?view=table")
+    assert table.status_code == 200
+    assert "Portfolio table" in table.text
+    assert "Project comparison" in table.text
+    assert "Alpha Launch" in table.text
+
+
+def test_template_routes_create_project_and_document_templates(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    client.post(
+        "/projects/new",
+        data={
+            "name": "Template Source",
+            "description": "Reusable structure",
+            "start_date": "2026-04-23",
+            "end_date": "2026-05-15",
+        },
+        follow_redirects=True,
+    )
+    client.post(
+        "/projects/template-source/milestones",
+        data={"title": "Design Review", "target_date": "2026-05-01", "status": "planned"},
+        follow_redirects=True,
+    )
+
+    template = client.post(
+        "/templates/projects",
+        data={"project_slug": "template-source", "name": "Launch Template", "description": "Standard launch flow"},
+        follow_redirects=True,
+    )
+    assert template.status_code == 200
+    assert "Launch Template" in template.text
+    assert (tmp_path / "project_templates" / "launch-template.json").exists()
+
+    created = client.post(
+        "/projects/new",
+        data={"name": "Launch From Template", "description": "", "template_slug": "launch-template"},
+        follow_redirects=True,
+    )
+    assert created.status_code == 200
+    assert "Launch From Template" in created.text
+    assert "Design Review" in created.text
+
+    document = client.post(
+        "/templates/documents",
+        data={
+            "name": "RFQ Packet",
+            "description": "Supplier request",
+            "fields_text": "part_number|Part Number|string|PN,Item Number|required|\nbom_table|BOM Table|excel_table|BOM|required|Rows ready",
+        },
+        follow_redirects=True,
+    )
+    assert document.status_code == 200
+    assert "RFQ Packet" in document.text
+    assert "50%" in document.text
+    assert "part_number" in document.text
+    assert "PN" in document.text
+
+
 def test_markdown_preview_endpoint(tmp_path: Path) -> None:
     client = make_client(tmp_path)
 

@@ -301,7 +301,7 @@ button:hover {
 }
 
 .filters {
-  grid-template-columns: minmax(240px, 1.7fr) repeat(2, minmax(170px, 0.9fr)) auto auto;
+  grid-template-columns: minmax(240px, 1.7fr) repeat(3, minmax(150px, 0.8fr)) auto auto;
   align-items: end;
 }
 
@@ -434,7 +434,8 @@ button:hover {
 .simple-list,
 .history-list,
 .result-list,
-.access-link-list {
+.access-link-list,
+.field-list {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -455,6 +456,8 @@ button:hover {
 .stakeholder-card,
 .milestone-card,
 .access-view-card,
+.template-card,
+.field-list li,
 .roadblock-list li,
 .access-link-list li {
   border: 1px solid var(--line);
@@ -466,7 +469,8 @@ button:hover {
 .result-list li,
 .mini-metric,
 .roadblock-list li,
-.access-link-list li {
+.access-link-list li,
+.field-list li {
   padding: 0.85rem 1rem;
 }
 
@@ -477,7 +481,8 @@ button:hover {
 
 .simple-list li,
 .roadblock-list li,
-.access-link-list li {
+.access-link-list li,
+.field-list li {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
@@ -976,6 +981,163 @@ select[multiple] {
   margin-bottom: 1rem;
 }
 
+.template-list li span:first-child,
+.field-list li span:first-child {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.template-list small,
+.field-list small {
+  color: var(--muted);
+}
+
+.template-card {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+
+.field-missing {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.completion-ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.4rem;
+  height: 3.4rem;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
+.portfolio-gantt-card,
+.portfolio-table-card {
+  overflow: hidden;
+}
+
+.portfolio-gantt {
+  position: relative;
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1rem;
+  min-width: 760px;
+}
+
+.gantt-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.28fr) minmax(420px, 1fr);
+  gap: 0.9rem;
+  align-items: center;
+}
+
+.gantt-row-label {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.gantt-row-label a {
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.gantt-row-label span {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.gantt-track {
+  position: relative;
+  height: 2.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.54);
+  overflow: hidden;
+}
+
+.gantt-bar {
+  position: absolute;
+  top: 0.42rem;
+  bottom: 0.42rem;
+  min-width: 1.5rem;
+  display: flex;
+  align-items: center;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+  color: white;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.gantt-health-on-track { background: var(--success); }
+.gantt-health-at-risk { background: var(--warning); }
+.gantt-health-blocked { background: var(--danger); }
+.gantt-health-complete { background: var(--accent-strong); }
+
+.gantt-milestone {
+  position: absolute;
+  top: 0.44rem;
+  width: 0.7rem;
+  height: 1.6rem;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.92);
+  background: var(--accent-strong);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.12);
+}
+
+.gantt-milestone-complete { background: var(--success); }
+.gantt-milestone-blocked { background: var(--danger); }
+.gantt-milestone-active { background: var(--accent); }
+
+.gantt-today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent-strong);
+  z-index: 2;
+}
+
+.portfolio-table-wrap {
+  margin-top: 1rem;
+  overflow-x: auto;
+}
+
+.portfolio-table {
+  width: 100%;
+  min-width: 840px;
+  border-collapse: collapse;
+}
+
+.portfolio-table th,
+.portfolio-table td {
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.portfolio-table th {
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.portfolio-table a {
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-decoration: none;
+}
+
 html[data-theme="dark"] .topbar,
 html[data-theme="dark"] .card,
 html[data-theme="dark"] .hero-panel,
@@ -1024,11 +1186,14 @@ html[data-theme="dark"] .view-kpi-card,
 html[data-theme="dark"] .stakeholder-card,
 html[data-theme="dark"] .milestone-card,
 html[data-theme="dark"] .access-view-card,
+html[data-theme="dark"] .template-card,
+html[data-theme="dark"] .field-list li,
 html[data-theme="dark"] .roadblock-list li,
 html[data-theme="dark"] .access-link-list li,
 html[data-theme="dark"] .hero-chip,
 html[data-theme="dark"] .legend-chip,
-html[data-theme="dark"] .pill {
+html[data-theme="dark"] .pill,
+html[data-theme="dark"] .gantt-track {
   background: rgba(13, 24, 44, 0.88);
   color: var(--ink);
   border-color: var(--line);
