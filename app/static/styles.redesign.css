@@ -1091,6 +1091,42 @@ html[data-theme="dark"] .pg-bar.pg-health-complete { background: #6c7a89; }
 }
 
 /* =====================================================================
+   Project dictionary grid rows
+   ===================================================================== */
+
+.grid-row-dict {
+  display: grid;
+  grid-template-columns: 1.2fr 1.2fr 1.5fr 1.5fr 1.4fr auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.grid-row-dict input { font-size: 0.86rem; padding: 7px 10px; }
+
+@media (max-width: 1024px) {
+  .grid-row-dict { grid-template-columns: 1fr 1fr; }
+  .grid-row-dict input { grid-column: span 1; }
+}
+
+/* =====================================================================
+   Hint block snippets
+   ===================================================================== */
+
+.hint .hint-code {
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  margin: 6px 0 8px;
+  white-space: pre-wrap;
+}
+.hint code { background: var(--surface-muted); padding: 1px 6px; border-radius: 4px; font-size: 0.85em; }
+.hint ul { margin: 6px 0 4px 18px; padding: 0; }
+.hint li { margin: 4px 0; line-height: 1.45; }
+
+/* =====================================================================
    Access dictionary — clearer rename / delete affordances
    ===================================================================== */
 

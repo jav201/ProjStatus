@@ -1,0 +1,150 @@
+<section class="card">
+  <div class="section-heading">
+    <div>
+      <h2>Project dictionary</h2>
+      <p class="muted">Key-value labels used to fill document-template <code>{{ '{{ tag }}' }}</code> tags. Dictionary entries override template defaults when you render a <code>.docx</code> for this project.</p>
+    </div>
+  </div>
+
+  <details class="hint">
+    <summary><strong>How it works</strong></summary>
+    <p>Each entry has a <strong>key</strong> (must match a tag inside your Word file, e.g. <code>part_number</code>) and a <strong>value</strong> (what gets substituted, e.g. <code>ABC-12345</code>). Optional: a friendlier <em>label</em> for display, and <em>notes</em>.</p>
+    <p>Built-in tags like <code>{{ '{{ project_name }}' }}</code>, <code>{{ '{{ today }}' }}</code>, <code>{{ '{{ milestones }}' }}</code> are always available — you don't need to add them here.</p>
+  </details>
+
+  {% if project.dictionary %}
+    <div class="table-stack dict-table">
+      {% for entry in project.dictionary %}
+        <form class="grid-row grid-row-dict" method="post" action="{{ request.url_for('dictionary_update', slug=project.slug, entry_id=entry.id) }}">
+          <input type="text" name="key" value="{{ entry.key }}" placeholder="part_number" pattern="[A-Za-z_][\w]*" required>
+          <input type="text" name="label" value="{{ entry.label }}" placeholder="Part Number">
+          <input type="text" name="value" value="{{ entry.value }}" placeholder="ABC-12345">
+          <input type="text" name="notes" value="{{ entry.notes }}" placeholder="Notes">
+          <input type="text" name="change_note" placeholder="Addendum note">
+          <button class="button" type="submit">Save</button>
+        </form>
+        <form class="inline-delete" method="post" action="{{ request.url_for('dictionary_delete', slug=project.slug, entry_id=entry.id) }}">
+          <input type="hidden" name="change_note" value="Removed dictionary entry {{ entry.key }}">
+          <button class="button button-danger" type="submit">Delete</button>
+        </form>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">No dictionary entries yet. Add one below to start filling document templates with project-specific values.</p>
+  {% endif %}
+
+  <form class="form-grid section-form-top" method="post" action="{{ request.url_for('dictionary_create', slug=project.slug) }}">
+    <label>
+      Key
+      <input type="text" name="key" placeholder="part_number" pattern="[A-Za-z_][\w]*" required>
+    </label>
+    <label>
+      Label
+      <input type="text" name="label" placeholder="Part Number">
+    </label>
+    <label>
+      Value
+      <input type="text" name="value" placeholder="ABC-12345">
+    </label>
+    <label>
+      Notes
+      <input type="text" name="notes" placeholder="Source / context">
+    </label>
+    <label>
+      Addendum note
+      <input type="text" name="change_note">
+    </label>
+    <div>
+      <button class="button button-primary" type="submit">Add entry</button>
+    </div>
+  </form>
+</section>
+
+<section class="card">
+  <div class="section-heading">
+    <h2>Access links</h2>
+    <p class="muted">Accordion categories for the URLs your team reaches for most.</p>
+  </div>
+
+  {% for category in project.access_links %}
+    <details class="accordion" open>
+      <summary class="accordion-head">
+        <strong>{{ category.name }}</strong>
+        <span class="muted">· {{ category.links|length }} link{{ '' if category.links|length == 1 else 's' }}</span>
+      </summary>
+      <div class="category-tools">
+        <form class="rename-row" method="post" action="{{ request.url_for('access_category_update', slug=project.slug, category_id=category.id) }}">
+          <label class="rename-label">
+            Rename category
+            <input type="text" name="name" value="{{ category.name }}" required>
+          </label>
+          <button class="button button-primary" type="submit">Save name</button>
+        </form>
+        <form class="inline-actions delete-row" method="post" action="{{ request.url_for('access_category_delete', slug=project.slug, category_id=category.id) }}" onsubmit="return confirm('Delete the {{ category.name }} category and all its links?');">
+          <button class="button button-subtle button-danger" type="submit">Delete category</button>
+        </form>
+      </div>
+
+      {% if category.links %}
+        {% for link in category.links %}
+          <form class="grid-row grid-row-link" method="post" action="{{ request.url_for('access_link_update', slug=project.slug, category_id=category.id, link_id=link.id) }}">
+            <input type="text" name="label" value="{{ link.label }}" required>
+            <input type="url" name="url" value="{{ link.url }}" required>
+            <input type="text" name="notes" value="{{ link.notes }}" placeholder="Notes">
+            <select name="owner_person_id">
+              <option value="">No owner</option>
+              {% for person in project.people %}
+                <option value="{{ person.id }}" {% if link.owner_person_id == person.id %}selected{% endif %}>{{ person.name }}</option>
+              {% endfor %}
+            </select>
+            <input type="text" name="change_note" placeholder="Addendum note">
+            <button class="button" type="submit">Save</button>
+          </form>
+          <form class="inline-delete" method="post" action="{{ request.url_for('access_link_delete', slug=project.slug, category_id=category.id, link_id=link.id) }}">
+            <input type="hidden" name="change_note" value="Removed access link {{ link.label }}">
+            <button class="button button-danger" type="submit">Delete</button>
+          </form>
+        {% endfor %}
+      {% else %}
+        <p class="muted">No links in this category.</p>
+      {% endif %}
+
+      <form class="form-grid section-form-top" method="post" action="{{ request.url_for('access_link_create', slug=project.slug, category_id=category.id) }}">
+        <label>
+          Label
+          <input type="text" name="label" required>
+        </label>
+        <label>
+          URL
+          <input type="url" name="url" required>
+        </label>
+        <label>
+          Notes
+          <input type="text" name="notes">
+        </label>
+        <label>
+          Owner
+          <select name="owner_person_id">
+            <option value="">No owner</option>
+            {% for person in project.people %}
+              <option value="{{ person.id }}">{{ person.name }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Addendum note
+          <input type="text" name="change_note">
+        </label>
+        <div>
+          <button class="button button-primary" type="submit">Add link</button>
+        </div>
+      </form>
+    </details>
+  {% endfor %}
+
+  <form class="inline-actions section-form-top" method="post" action="{{ request.url_for('access_category_create', slug=project.slug) }}">
+    <input type="text" name="name" placeholder="New category" required>
+    <input type="text" name="change_note" placeholder="Addendum note">
+    <button class="button button-primary" type="submit">Add category</button>
+  </form>
+</section>

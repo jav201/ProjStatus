@@ -137,10 +137,21 @@ class Project(BaseModel):
     archived_at: datetime | None = None
     people: list[Person] = Field(default_factory=list)
     access_links: list[AccessCategory] = Field(default_factory=list)
+    dictionary: list["DictionaryEntry"] = Field(default_factory=list)
     milestones: list[Milestone] = Field(default_factory=list)
     tasks: list[Task] = Field(default_factory=list)
     board_columns: list[str] = Field(default_factory=lambda: ["Backlog", "In Progress", "Blocked", "Done"])
     sync_state: SyncState = Field(default_factory=SyncState)
+
+
+class DictionaryEntry(BaseModel):
+    """Project-scoped key/value mapping used to fill document-template tags."""
+
+    id: str = Field(default_factory=lambda: make_id("dict"))
+    key: str
+    value: str = ""
+    label: str = ""
+    notes: str = ""
 
 
 SectionName = Literal["content", "change_requests", "roadblocks", "notes"]

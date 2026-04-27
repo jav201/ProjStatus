@@ -205,6 +205,31 @@ def test_section_round_trip_does_not_grow_newlines(tmp_path: Path) -> None:
     assert final.count("\n\n") == 1
 
 
+def test_dictionary_overrides_template_field_values(tmp_path: Path) -> None:
+    """build_render_context should let project.dictionary override template default values."""
+    from app.models import DictionaryEntry, DocumentTemplate, Project
+    from app.services.storage import build_render_context
+
+    project = Project(slug="p", name="Demo")
+    project.dictionary = [
+        DictionaryEntry(key="part_number", value="ABC-12345"),
+        DictionaryEntry(key="supplier_name", value="Acme Corp"),
+    ]
+    template = DocumentTemplate(
+        slug="t",
+        name="Quote",
+        fields=[
+            DocumentTemplateField(key="part_number", label="Part", value="DEFAULT-XXX"),
+            DocumentTemplateField(key="supplier_name", label="Supplier", value=""),
+            DocumentTemplateField(key="revision", label="Rev", value="A"),
+        ],
+    )
+    ctx = build_render_context(template, project)
+    assert ctx["part_number"] == "ABC-12345"  # dictionary wins
+    assert ctx["supplier_name"] == "Acme Corp"  # dictionary fills empty default
+    assert ctx["revision"] == "A"  # untouched template value
+
+
 def test_load_project_heals_existing_corruption(tmp_path: Path) -> None:
     """If a section file already has 4+ consecutive newlines on disk,
     load_project should collapse them down to 2 paragraph breaks."""
