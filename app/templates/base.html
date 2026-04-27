@@ -7,47 +7,102 @@
   <script>
     (() => {
       try {
-        const storedTheme = window.localStorage.getItem("projstatus-theme");
-        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        document.documentElement.dataset.theme = storedTheme || (prefersDark ? "dark" : "light");
+        const stored = window.localStorage.getItem("projstatus-theme");
+        document.documentElement.dataset.theme = stored || "light";
       } catch (error) {
         document.documentElement.dataset.theme = "light";
       }
     })();
   </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ request.url_for('static', path='/styles.css') }}">
+  <link rel="stylesheet" href="{{ request.url_for('static', path='/styles.redesign.css') }}">
   <script src="https://unpkg.com/htmx.org@2.0.4"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <script defer src="{{ request.url_for('static', path='/app.js') }}"></script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
-  <div class="page-shell">
-    <header class="topbar top-nav">
-      <a class="brand" href="{{ request.url_for('dashboard') }}">
-        <span class="brand-kicker">Local-first PM</span>
-        <strong>ProjStatus</strong>
+  <button class="sidebar-toggle" type="button" data-sidebar-toggle aria-label="Toggle sidebar">☰</button>
+  <div class="app-shell">
+    <aside class="sidebar" data-sidebar>
+      <a class="sidebar-brand" href="{{ request.url_for('dashboard') }}">
+        <span class="sidebar-brand-mark">P</span>
+        <span class="sidebar-brand-name">ProjStatus</span>
+        <span class="sidebar-brand-tag">local</span>
       </a>
-      <div class="topbar-actions">
-        <nav class="topnav">
-          <a href="{{ request.url_for('dashboard') }}">Dashboard</a>
-          <a href="{{ request.url_for('project_new') }}">New Project</a>
-          <a href="{{ request.url_for('templates') }}">Templates</a>
-          <a href="{{ request.url_for('exports') }}">Exports</a>
+
+      <nav class="sidebar-nav">
+        <p class="sidebar-section">Workspace</p>
+        <a class="sidebar-link" href="{{ request.url_for('dashboard') }}" data-active="{{ 'true' if active_nav == 'dashboard' else 'false' }}">
+          <span class="sidebar-icon">📊</span> Dashboard
+        </a>
+        <a class="sidebar-link" href="{{ request.url_for('inbox') }}" data-active="{{ 'true' if active_nav == 'inbox' else 'false' }}">
+          <span class="sidebar-icon">📨</span> Inbox
+          {% if inbox_count %}<span class="sidebar-badge">{{ inbox_count }}</span>{% endif %}
+        </a>
+        <a class="sidebar-link" href="{{ request.url_for('risks') }}" data-active="{{ 'true' if active_nav == 'risks' else 'false' }}">
+          <span class="sidebar-icon">⚠️</span> Risks &amp; roadblocks
+          {% if risks_count %}<span class="sidebar-badge">{{ risks_count }}</span>{% endif %}
+        </a>
+        <a class="sidebar-link" href="{{ request.url_for('templates') }}" data-active="{{ 'true' if active_nav == 'templates' else 'false' }}">
+          <span class="sidebar-icon">📋</span> Templates
+        </a>
+        <a class="sidebar-link" href="{{ request.url_for('exports') }}" data-active="{{ 'true' if active_nav == 'exports' else 'false' }}">
+          <span class="sidebar-icon">⤓</span> Exports
+        </a>
+
+        <div class="sidebar-section-row">
+          <p class="sidebar-section">Projects</p>
+          <a class="sidebar-section-add" href="{{ request.url_for('project_new') }}" title="New project">+</a>
+        </div>
+        {% for project in sidebar_projects %}
+          <a class="sidebar-link sidebar-project" href="{{ request.url_for('project_overview', slug=project.slug) }}" data-active="{{ 'true' if active_project_slug == project.slug else 'false' }}">
+            <span class="sidebar-dot health-{{ project.health }}"></span>
+            <span class="sidebar-project-name">{{ project.name }}</span>
+          </a>
+        {% else %}
+          <span class="sidebar-empty">No projects yet</span>
+        {% endfor %}
+      </nav>
+
+      <div class="sidebar-footer">
+        <span class="sidebar-identity">You · <strong>{{ identity }}</strong></span>
+        <span class="sidebar-shortcut">⌘K</span>
+      </div>
+    </aside>
+
+    <div class="app-main">
+      <header class="app-topbar">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          {% for crumb in breadcrumb_trail %}
+            {% if crumb.url and not loop.last %}
+              <a href="{{ crumb.url }}">{{ crumb.label }}</a>
+            {% else %}
+              <span class="crumb-current">{{ crumb.label }}</span>
+            {% endif %}
+            {% if not loop.last %}<span class="crumb-sep">/</span>{% endif %}
+          {% endfor %}
         </nav>
+        <form class="global-search" method="get" action="{{ request.url_for('dashboard') }}" role="search">
+          <input type="search" name="search" placeholder="Search projects, owners, roles…" value="{{ request.query_params.get('search', '') }}">
+          <span class="global-search-shortcut">⌘K</span>
+        </form>
         <button class="button button-subtle theme-toggle" type="button" data-theme-toggle aria-label="Toggle dark mode">
           <span data-theme-label>Dark mode</span>
         </button>
-      </div>
-    </header>
+      </header>
 
-    {% if message %}
-      <div class="flash flash-{{ message_level }}">{{ message }}</div>
-    {% endif %}
+      {% if message %}
+        <div class="flash flash-{{ message_level }}">{{ message }}</div>
+      {% endif %}
 
-    <main class="content-shell">
-      {% block content %}{% endblock %}
-    </main>
+      <main class="content-shell">
+        {% block content %}{% endblock %}
+      </main>
+    </div>
   </div>
 </body>
 </html>

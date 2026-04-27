@@ -8,7 +8,30 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeBoard();
   initializeMermaidEditor();
   initializeTaskSidePanel();
+  bindOutsideClickClose();
+  bindSidebarToggle();
 });
+
+function bindSidebarToggle() {
+  const toggle = document.querySelector("[data-sidebar-toggle]");
+  const sidebar = document.querySelector("[data-sidebar]");
+  if (!toggle || !sidebar) return;
+  toggle.addEventListener("click", () => sidebar.classList.toggle("is-open"));
+  document.addEventListener("click", (event) => {
+    if (window.innerWidth > 1024) return;
+    if (toggle.contains(event.target) || sidebar.contains(event.target)) return;
+    sidebar.classList.remove("is-open");
+  });
+}
+
+function bindOutsideClickClose() {
+  // Close any open <details class="menu" | "health-chip"> when clicking outside.
+  document.addEventListener("click", (event) => {
+    document.querySelectorAll("details.menu[open], details.health-chip[open]").forEach((d) => {
+      if (!d.contains(event.target)) d.removeAttribute("open");
+    });
+  });
+}
 
 document.body.addEventListener("htmx:afterSwap", () => {
   initializeMermaid();
@@ -70,7 +93,8 @@ function resolveTheme() {
   if (storedTheme) {
     return storedTheme;
   }
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  // Default to light to match the design mockup; system-dark is opt-in via toggle.
+  return "light";
 }
 
 function applyTheme(theme) {
