@@ -20,12 +20,42 @@
       </div>
       <div class="project-hero-copy">
         <div class="project-card-title-row">
-          <span class="health-badge {{ health_class }}">{{ project.health.value }}</span>
+          {% if present_mode %}
+            <span class="health-badge {{ health_class }}">{{ project.health.value }}</span>
+          {% else %}
+            <details class="health-chip">
+              <summary class="health-badge {{ health_class }}">{{ project.health.value }}</summary>
+              <div class="health-chip-menu">
+                {% for value in ['on-track', 'at-risk', 'blocked', 'complete'] %}
+                  <form method="post" action="{{ request.url_for('project_meta_update', slug=project.slug) }}">
+                    <input type="hidden" name="name" value="{{ project.name }}">
+                    <input type="hidden" name="description" value="{{ project.description or '' }}">
+                    <input type="hidden" name="logo_path" value="{{ project.logo_path or '' }}">
+                    <input type="hidden" name="health" value="{{ value }}">
+                    <input type="hidden" name="status" value="{{ project.status.value }}">
+                    <input type="hidden" name="start_date" value="{{ format_date(project.start_date) or '' }}">
+                    <input type="hidden" name="end_date" value="{{ format_date(project.end_date) or '' }}">
+                    <input type="hidden" name="change_note" value="Health → {{ value }}">
+                    <button type="submit" {% if project.health.value == value %}aria-current="true"{% endif %}>
+                      <span><span class="swatch swatch-{{ value }}"></span> {{ value }}</span>
+                    </button>
+                  </form>
+                {% endfor %}
+              </div>
+            </details>
+          {% endif %}
           <span class="muted">· {{ project.status.value }}{% if project.start_date or project.end_date %} · {{ project.start_date or '—' }} → {{ project.end_date or '—' }}{% endif %}</span>
           {% if project.archived %}<span class="pill pill-muted">Archived</span>{% endif %}
         </div>
         <h1 class="project-title">{{ project.name }}</h1>
         {% if project.description %}<p class="hero-copy">{{ project.description }}</p>{% endif %}
+        {% set pct = (progress_pct * 100) | round | int %}
+        <span class="progress-inline" title="{{ pct }}% of tasks complete">
+          <span class="progress-bar progress-{{ project.health.value }}">
+            <span class="progress-fill" style="width: {{ pct }}%"></span>
+          </span>
+          <span class="progress-num">{{ pct }}%</span>
+        </span>
       </div>
     </div>
     <div class="project-header__actions">

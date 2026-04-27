@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -99,9 +99,37 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             "blocked": sum(1 for item in projects if item.roadblock_count > 0 or item.health.value == "blocked"),
             "due_soon": due_soon,
         }
+        kpi_history = storage.kpi_snapshot_history(days=14)
+        kpi_series = {
+            key: [snapshot[key] for snapshot in kpi_history] for key in ("on_track", "at_risk", "blocked", "due_soon")
+        }
+        kpi_deltas: dict[str, int] = {}
+        cutoff_index = max(len(kpi_history) - 8, 0)
+        for key, current in summary_cards.items():
+            past = kpi_history[cutoff_index][key] if kpi_history else current
+            kpi_deltas[key] = current - past
+
+        slug_to_loaded = {p.slug: p for p in loaded_projects}
+        project_cards = []
+        for entry in projects:
+            project = slug_to_loaded.get(entry.slug)
+            if project is None:
+                continue
+            project_cards.append(
+                {
+                    "entry": entry,
+                    "progress_pct": progress_pct(project),
+                    "next_milestone": entry.next_milestone,
+                    "owners": entry.owner_names[:3],
+                }
+            )
+
         context = {
             "projects": projects,
             "summary_cards": summary_cards,
+            "kpi_series": kpi_series,
+            "kpi_deltas": kpi_deltas,
+            "project_cards": project_cards,
             "recent_addendums": recent_addendums,
             "upcoming_milestones": sorted(upcoming_milestones, key=lambda item: item[1].target_date or date.max)[:8],
             "blocked_tasks": blocked_tasks[:8],
@@ -113,6 +141,78 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             "portfolio_gantt": build_portfolio_gantt(loaded_projects, today),
         }
         return render_template(request, "dashboard.html", context)
+
+    @app.get("/inbox", response_class=HTMLResponse, name="inbox")
+    async def inbox(request: Request, filter: str = "all") -> HTMLResponse:
+        addendums = storage.list_recent_addendums(limit=50, include_archived=False)
+        cutoff = datetime.now() - timedelta(hours=24)
+        if filter == "unread":
+            addendums = [(slug, addendum) for slug, addendum in addendums if addendum.created_at >= cutoff]
+        groups: dict[str, list[tuple[str, Any]]] = {}
+        for slug, addendum in addendums:
+            groups.setdefault(addendum.created_at.strftime("%Y-%m-%d"), []).append((slug, addendum))
+        sync_notices: list[dict[str, Any]] = []
+        for entry in storage.list_dashboard_projects(include_archived=False):
+            loaded = storage.load_project(entry.slug)
+            if loaded.sync_notice or loaded.validation_errors:
+                sync_notices.append(
+                    {
+                        "slug": entry.slug,
+                        "name": entry.name,
+                        "sync_notice": loaded.sync_notice,
+                        "errors": loaded.validation_errors,
+                    }
+                )
+        return render_template(
+            request,
+            "inbox.html",
+            {
+                "addendum_groups": sorted(groups.items(), reverse=True),
+                "sync_notices": sync_notices,
+                "filter": filter,
+                "unread_count": sum(1 for _, addendum in addendums if addendum.created_at >= cutoff),
+            },
+        )
+
+    @app.get("/risks", response_class=HTMLResponse, name="risks")
+    async def risks_and_roadblocks(request: Request) -> HTMLResponse:
+        blocked_rows: list[dict[str, Any]] = []
+        roadblock_notes: list[dict[str, Any]] = []
+        today = date.today()
+        for entry in storage.list_dashboard_projects(sort_by="recent_update", include_archived=False):
+            loaded = storage.load_project(entry.slug)
+            people_map = {person.id: person for person in loaded.project.people}
+            for task in loaded.project.tasks:
+                if task.column != "Blocked":
+                    continue
+                blocked_since = days_blocked(loaded.addendums, task.id, today)
+                blocked_rows.append(
+                    {
+                        "task": task,
+                        "project_slug": entry.slug,
+                        "project_name": entry.name,
+                        "days_blocked": blocked_since,
+                        "assignees": [people_map[pid] for pid in task.assignee_ids if pid in people_map],
+                    }
+                )
+            roadblocks_text = (loaded.sections.get("roadblocks") or "").strip()
+            if roadblocks_text:
+                roadblock_notes.append(
+                    {
+                        "slug": entry.slug,
+                        "name": entry.name,
+                        "text": roadblocks_text,
+                    }
+                )
+        blocked_rows.sort(key=lambda row: row["days_blocked"] or 0, reverse=True)
+        return render_template(
+            request,
+            "risks.html",
+            {
+                "blocked_rows": blocked_rows,
+                "roadblock_notes": roadblock_notes,
+            },
+        )
 
     @app.get("/projects/new", response_class=HTMLResponse, name="project_new")
     async def new_project(request: Request) -> HTMLResponse:
@@ -898,6 +998,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             "tab_template": tab_template(active_tab),
             "export_mode": False,
             "present_mode": active_tab == "view_mode",
+            "progress_pct": progress_pct(loaded.project),
         }
         return render_template(request, "project.html", context)
 
@@ -908,15 +1009,116 @@ def render_markdown(value: str) -> str:
     return markdown(value or "", extensions=["fenced_code", "tables", "sane_lists"])
 
 
+def progress_pct(project: Project) -> float:
+    total = len(project.tasks)
+    if not total:
+        return 0.0
+    done = sum(1 for task in project.tasks if task.column == "Done")
+    return done / total
+
+
+def days_blocked(addendums: list[Any], task_id: str, today: date) -> int | None:
+    """How many days the task has been in the Blocked column.
+
+    Walks history to find the most recent move TO Blocked. Falls back to
+    the project's earliest addendum if we can't pinpoint the move.
+    """
+    if not addendums:
+        return None
+    for addendum in addendums:
+        for line in addendum.summary or []:
+            if "Blocked" in line and task_id[:8] in line:
+                return max((today - addendum.created_at.date()).days, 0)
+    return max((today - addendums[-1].created_at.date()).days, 0)
+
+
 def render_template(request: Request, template_name: str, context: dict[str, Any]) -> HTMLResponse:
     templates: Jinja2Templates = request.app.state.templates
+    storage: StorageService = request.app.state.storage
+    sidebar_ctx = build_sidebar_context(storage, request, context)
     merged = {
         "request": request,
         "message": context.get("message", request.query_params.get("message", "")),
         "message_level": context.get("message_level", request.query_params.get("level", "info")),
+        **sidebar_ctx,
     }
     merged.update(context)
     return templates.TemplateResponse(request, template_name, merged)
+
+
+def build_sidebar_context(storage: StorageService, request: Request, page_context: dict[str, Any]) -> dict[str, Any]:
+    """Sidebar + breadcrumb context shared across every page."""
+    import os
+
+    path = request.url.path
+    active_nav = "dashboard"
+    if path.startswith("/projects/new") or path == "/projects/new":
+        active_nav = "new_project"
+    elif path.startswith("/projects/"):
+        active_nav = "project"
+    elif path.startswith("/templates"):
+        active_nav = "templates"
+    elif path.startswith("/exports"):
+        active_nav = "exports"
+    elif path.startswith("/inbox"):
+        active_nav = "inbox"
+    elif path.startswith("/risks"):
+        active_nav = "risks"
+
+    today = date.today()
+    cutoff = today - timedelta(days=7)
+    inbox_count = 0
+    risks_count = 0
+    sidebar_projects: list[dict[str, Any]] = []
+    for entry in storage.list_dashboard_projects(sort_by="recent_update", include_archived=False):
+        sidebar_projects.append({"slug": entry.slug, "name": entry.name, "health": entry.health.value})
+        if entry.recent_addendum_at and entry.recent_addendum_at.date() >= cutoff:
+            inbox_count += 1
+        if entry.health.value == "blocked":
+            risks_count += 1
+        risks_count += entry.roadblock_count
+
+    breadcrumb_trail = build_breadcrumbs(active_nav, request, page_context)
+
+    try:
+        identity = os.getlogin().split(".")[0].split("_")[0].title()
+    except OSError:
+        identity = "You"
+
+    active_project_slug = ""
+    if active_nav == "project":
+        parts = path.strip("/").split("/")
+        if len(parts) >= 2:
+            active_project_slug = parts[1]
+
+    return {
+        "active_nav": active_nav,
+        "active_project_slug": active_project_slug,
+        "inbox_count": inbox_count,
+        "risks_count": risks_count,
+        "sidebar_projects": sidebar_projects,
+        "breadcrumb_trail": breadcrumb_trail,
+        "identity": identity,
+    }
+
+
+def build_breadcrumbs(active_nav: str, request: Request, page_context: dict[str, Any]) -> list[dict[str, str]]:
+    crumbs: list[dict[str, str]] = [{"label": "Workspace", "url": str(request.url_for("dashboard"))}]
+    project = page_context.get("project")
+    template_pages = {
+        "dashboard": "Dashboard",
+        "new_project": "New project",
+        "templates": "Templates",
+        "exports": "Exports",
+        "inbox": "Inbox",
+        "risks": "Risks & roadblocks",
+    }
+    if active_nav in template_pages:
+        crumbs.append({"label": template_pages[active_nav], "url": ""})
+    elif active_nav == "project" and project:
+        crumbs.append({"label": "Projects", "url": str(request.url_for("dashboard"))})
+        crumbs.append({"label": project.name, "url": ""})
+    return crumbs
 
 
 def build_portfolio_gantt(projects: list[Project], today: date) -> dict[str, Any]:

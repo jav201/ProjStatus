@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Inbox | ProjStatus{% endblock %}
+
+{% block content %}
+  <section class="page-heading compact">
+    <div>
+      <p class="eyebrow">Activity</p>
+      <h1>Inbox</h1>
+    </div>
+    <div class="segmented">
+      <a class="{% if filter != 'unread' %}is-active{% endif %}" href="{{ request.url_for('inbox') }}">All</a>
+      <a class="{% if filter == 'unread' %}is-active{% endif %}" href="{{ request.url_for('inbox') }}?filter=unread">Last 24h{% if unread_count %} · {{ unread_count }}{% endif %}</a>
+    </div>
+  </section>
+
+  <section class="dashboard-grid">
+    <div class="stack">
+      {% if addendum_groups %}
+        {% for day, items in addendum_groups %}
+          <article class="card">
+            <h3 class="muted day-heading">{{ day }}</h3>
+            <ul class="simple-list inbox-list">
+              {% for slug, addendum in items %}
+                {% set summary = addendum.summary[0] if addendum.summary else (addendum.note or 'Saved project') %}
+                <li>
+                  <a href="{{ request.url_for('project_history', slug=slug) }}?entry={{ addendum.id }}">
+                    <span class="inbox-avatar">{{ slug.split('-')[0][:2].upper() }}</span>
+                    <span class="inbox-body">
+                      <strong>{{ summary }}</strong>
+                      <small class="muted">{{ slug }}</small>
+                    </span>
+                  </a>
+                  <span class="inbox-when">{{ addendum.created_at | when }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          </article>
+        {% endfor %}
+      {% else %}
+        <article class="card empty-state">
+          <h2>Nothing here yet</h2>
+          <p>{% if filter == 'unread' %}No activity in the last 24 hours.{% else %}Activity will appear after the first save.{% endif %}</p>
+        </article>
+      {% endif %}
+    </div>
+
+    <aside class="stack">
+      <section class="card">
+        <h3>Sync notices</h3>
+        {% if sync_notices %}
+          <ul class="simple-list">
+            {% for note in sync_notices %}
+              <li>
+                <a href="{{ request.url_for('project_overview', slug=note.slug) }}">
+                  <strong>{{ note.name }}</strong>
+                  {% if note.sync_notice %}<small class="muted">{{ note.sync_notice }}</small>{% endif %}
+                  {% for error in note.errors %}<small class="alert-line error">{{ error }}</small>{% endfor %}
+                </a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">All projects in sync.</p>
+        {% endif %}
+      </section>
+    </aside>
+  </section>
+{% endblock %}

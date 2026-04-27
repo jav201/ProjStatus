@@ -1,17 +1,20 @@
-<section class="kpi-row">
-  <div class="kpi-card">
+{% set milestones_done = project.milestones | selectattr('status.value', 'equalto', 'complete') | list | length %}
+{% set tasks_done = project.tasks | selectattr('column', 'equalto', 'Done') | list | length %}
+
+<section class="kpi-row kpi-strip">
+  <div class="kpi-card" data-tip="{{ project.people|length }} stakeholder{{ '' if project.people|length == 1 else 's' }}">
     <span class="kpi-label">People</span>
     <strong>{{ project.people|length }}</strong>
   </div>
-  <div class="kpi-card">
+  <div class="kpi-card" data-tip="{{ milestones_done }} of {{ project.milestones|length }} complete">
     <span class="kpi-label">Milestones</span>
     <strong>{{ project.milestones|length }}</strong>
   </div>
-  <div class="kpi-card">
+  <div class="kpi-card" data-tip="{{ tasks_done }} done · {{ project.tasks|length - tasks_done }} open">
     <span class="kpi-label">Tasks</span>
     <strong>{{ project.tasks|length }}</strong>
   </div>
-  <div class="kpi-card {% if blocked_tasks %}kpi-warning{% endif %}">
+  <div class="kpi-card {% if blocked_tasks %}kpi-warning{% endif %}" data-tip="{% if blocked_tasks %}{{ blocked_tasks|length }} task{{ '' if blocked_tasks|length == 1 else 's' }} blocked{% else %}No blocked tasks{% endif %}">
     <span class="kpi-label">Blocked</span>
     <strong>{{ blocked_tasks|length }}</strong>
   </div>
