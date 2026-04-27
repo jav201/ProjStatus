@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeMermaid();
   initializeBoard();
   initializeMermaidEditor();
+  initializeTaskSidePanel();
 });
 
 document.body.addEventListener("htmx:afterSwap", () => {
@@ -180,12 +181,102 @@ function initializeBoard() {
           if (!response.ok) {
             throw new Error("Move failed");
           }
-          window.location.reload();
+          updateColumnCounts();
         } catch (error) {
-          window.location.reload();
+          // revert on failure
+          showToast("Couldn't save move — refreshing.", "error");
+          setTimeout(() => window.location.reload(), 800);
         }
       },
     });
+  });
+}
+
+function updateColumnCounts() {
+  document.querySelectorAll(".board-column").forEach((column) => {
+    const lane = column.querySelector(".task-lane");
+    const counter = column.querySelector("header span");
+    if (lane && counter) {
+      counter.textContent = lane.querySelectorAll(".task-card").length;
+    }
+  });
+}
+
+function showToast(message, level) {
+  let toast = document.querySelector(".toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.className = "toast";
+    document.body.appendChild(toast);
+  }
+  toast.dataset.level = level || "info";
+  toast.textContent = message;
+  toast.classList.add("is-visible");
+  clearTimeout(toast.dataset.timeoutId);
+  toast.dataset.timeoutId = setTimeout(() => toast.classList.remove("is-visible"), 3500);
+}
+
+function initializeTaskSidePanel() {
+  const panel = document.querySelector("[data-task-panel]");
+  const backdrop = document.querySelector("[data-task-panel-backdrop]");
+  const form = document.querySelector("[data-task-form]");
+  if (!panel || !backdrop || !form) {
+    return;
+  }
+  const closeBtn = panel.querySelector("[data-task-panel-close]");
+  const deleteBtn = panel.querySelector("[data-task-delete]");
+
+  const close = () => {
+    panel.classList.remove("is-open");
+    backdrop.classList.remove("is-open");
+    panel.setAttribute("aria-hidden", "true");
+  };
+  closeBtn.addEventListener("click", close);
+  backdrop.addEventListener("click", close);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && panel.classList.contains("is-open")) close();
+  });
+
+  document.querySelectorAll(".task-card").forEach((card) => {
+    card.addEventListener("click", (event) => {
+      // ignore clicks that bubble up from drag operations
+      if (event.target.closest(".sortable-fallback") || card.classList.contains("sortable-chosen")) return;
+      const dataNode = card.querySelector(".task-data");
+      if (!dataNode) return;
+      const data = JSON.parse(dataNode.textContent || "{}");
+      form.action = card.dataset.editUrl;
+      form.elements.title.value = data.title || "";
+      form.elements.description.value = data.description || "";
+      form.elements.column.value = data.column || "";
+      form.elements.priority.value = data.priority || "medium";
+      form.elements.start_date.value = data.start_date || "";
+      form.elements.due_date.value = data.due_date || "";
+      form.elements.milestone_id.value = data.milestone_id || "";
+      form.elements.notes.value = data.notes || "";
+      form.elements.change_note.value = "";
+      const assignees = new Set(data.assignee_ids || []);
+      Array.from(form.elements.assignee_ids.options).forEach((option) => {
+        option.selected = assignees.has(option.value);
+      });
+      deleteBtn.dataset.url = card.dataset.deleteUrl;
+      panel.classList.add("is-open");
+      backdrop.classList.add("is-open");
+      panel.setAttribute("aria-hidden", "false");
+    });
+  });
+
+  deleteBtn.addEventListener("click", () => {
+    if (!deleteBtn.dataset.url) return;
+    if (!confirm("Delete this task?")) return;
+    const deleteForm = document.createElement("form");
+    deleteForm.method = "POST";
+    deleteForm.action = deleteBtn.dataset.url;
+    const note = document.createElement("input");
+    note.name = "change_note";
+    note.value = "Deleted from side panel";
+    deleteForm.appendChild(note);
+    document.body.appendChild(deleteForm);
+    deleteForm.submit();
   });
 }
 

@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class HealthStatus(StrEnum):
@@ -78,6 +78,8 @@ class Milestone(BaseModel):
 
 
 class Task(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str = Field(default_factory=lambda: make_id("task"))
     title: str
     description: str = ""
@@ -88,7 +90,6 @@ class Task(BaseModel):
     milestone_id: str | None = None
     priority: Priority = Priority.MEDIUM
     notes: str = ""
-    blocked: bool = False
 
     @field_validator("assignee_ids", mode="before")
     @classmethod
@@ -98,6 +99,17 @@ class Task(BaseModel):
         if isinstance(value, str):
             return [item for item in value.split(",") if item]
         return list(value)
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_blocked(cls, data: object) -> object:
+        if isinstance(data, dict) and data.pop("blocked", False) and data.get("column") not in ("Blocked", "Done"):
+            data["column"] = "Blocked"
+        return data
+
+    @property
+    def blocked(self) -> bool:
+        return self.column == "Blocked"
 
 
 class SyncState(BaseModel):
@@ -178,6 +190,7 @@ class DocumentTemplate(BaseModel):
     description: str = ""
     created_at: datetime = Field(default_factory=datetime.now)
     fields: list[DocumentTemplateField] = Field(default_factory=list)
+    docx_filename: str | None = None
 
     @property
     def required_count(self) -> int:

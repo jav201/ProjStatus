@@ -4,3 +4,8 @@ __pycache__/
 .venv/
 *.pyc
 *.egg-info/
+.claude/
+projects/*/
+!projects/.gitkeep
+document_templates/*.json
+document_templates/*/
