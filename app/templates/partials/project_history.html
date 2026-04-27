@@ -7,7 +7,7 @@
           <li class="{% if selected_addendum and selected_addendum.id == addendum.id %}active{% endif %}">
             <a href="{{ request.url_for('project_history', slug=project.slug) }}?entry={{ addendum.id }}">
               <strong>{{ addendum.id }}</strong>
-              <span>{{ addendum.created_at }}</span>
+              <span>{{ addendum.created_at | when }}</span>
             </a>
           </li>
         {% endfor %}
@@ -22,7 +22,7 @@
       <div class="section-heading">
         <div>
           <h2>{{ selected_addendum.id }}</h2>
-          <p class="muted">{{ selected_addendum.created_at }}</p>
+          <p class="muted">{{ selected_addendum.created_at | when }}</p>
         </div>
         <form class="inline-actions" method="post" action="{{ request.url_for('history_restore', slug=project.slug, addendum_id=selected_addendum.id) }}">
           <input type="text" name="change_note" placeholder="Reason for restore">

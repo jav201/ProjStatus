@@ -5,8 +5,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markdown import markdown
@@ -29,8 +29,8 @@ from app.models import (
 )
 from app.services.exports import ExportService
 from app.services.mermaid import import_timeline, render_timeline
-from app.services.storage import SECTION_NAMES, StorageService
-from app.utils import format_date, parse_date, slugify
+from app.services.storage import SECTION_NAMES, StorageService, inspect_docx_tags
+from app.utils import format_date, format_when, parse_date, slugify
 
 
 def create_app(root_dir: Path | None = None) -> FastAPI:
@@ -51,7 +51,9 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
     app = FastAPI(title="ProjStatus")
     templates = Jinja2Templates(directory=str(config.templates_dir))
     templates.env.filters["markdownify"] = render_markdown
+    templates.env.filters["when"] = format_when
     templates.env.globals["format_date"] = format_date
+    templates.env.globals["format_when"] = format_when
 
     app.state.config = config
     app.state.storage = storage
@@ -88,7 +90,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
                 if milestone.target_date and milestone.target_date <= today + timedelta(days=7):
                     due_soon += 1
             for task in loaded.project.tasks:
-                if task.blocked or task.column == "Blocked":
+                if task.column == "Blocked":
                     blocked_tasks.append((loaded.project.slug, task))
 
         summary_cards = {
@@ -146,6 +148,22 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
     async def templates_page(request: Request) -> HTMLResponse:
         document_templates = storage.list_document_templates()
         canonical_fields = build_canonical_field_index(document_templates)
+        document_template_views = []
+        for template in document_templates:
+            docx_path = storage.document_template_docx_path(template)
+            tags_found = inspect_docx_tags(docx_path) if docx_path else []
+            field_keys = {field.key for field in template.fields}
+            builtin_keys = list(BUILTIN_TAG_KEYS)
+            document_template_views.append(
+                {
+                    "template": template,
+                    "tags_found": tags_found,
+                    "builtin_keys": builtin_keys,
+                    "tags_unmapped": [tag for tag in tags_found if tag not in field_keys and tag not in builtin_keys],
+                    "fields_unused": [field for field in template.fields if tags_found and field.key not in tags_found],
+                    "fields_text": serialize_document_template_fields(template.fields),
+                }
+            )
         return render_template(
             request,
             "templates.html",
@@ -153,6 +171,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
                 "projects": storage.list_dashboard_projects(sort_by="name", include_archived=True),
                 "project_templates": storage.list_project_templates(),
                 "document_templates": document_templates,
+                "document_template_views": document_template_views,
                 "canonical_fields": canonical_fields,
             },
         )
@@ -177,6 +196,64 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         fields = parse_document_template_fields(fields_text)
         storage.create_document_template(name.strip(), description.strip(), fields)
         return redirect_to(request.url_for("templates"), "Document template created.", "success")
+
+    @app.post("/templates/documents/{slug}/upload", name="document_template_upload")
+    async def upload_document_template_file(
+        request: Request,
+        slug: str,
+        file: UploadFile = File(...),
+    ) -> RedirectResponse:
+        try:
+            data = await file.read()
+            storage.save_document_template_file(slug, file.filename or "template.docx", data)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Document template not found.")
+        return redirect_to(request.url_for("templates"), "Word template uploaded.", "success")
+
+    @app.post("/templates/documents/{slug}/file/delete", name="document_template_remove_file")
+    async def remove_document_template_file(request: Request, slug: str) -> RedirectResponse:
+        try:
+            storage.remove_document_template_file(slug)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Document template not found.")
+        return redirect_to(request.url_for("templates"), "Word file removed.", "success")
+
+    @app.post("/templates/documents/{slug}/fields", name="document_template_update_fields")
+    async def update_document_template_fields(
+        request: Request,
+        slug: str,
+        fields_text: str = Form(""),
+    ) -> RedirectResponse:
+        try:
+            template = storage.load_document_template(slug)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Document template not found.")
+        template.fields = parse_document_template_fields(fields_text)
+        storage.save_document_template(template)
+        return redirect_to(request.url_for("templates"), "Fields updated.", "success")
+
+    @app.post("/templates/documents/{slug}/delete", name="document_template_delete")
+    async def delete_document_template(request: Request, slug: str) -> RedirectResponse:
+        storage.delete_document_template(slug)
+        return redirect_to(request.url_for("templates"), "Document template deleted.", "success")
+
+    @app.post("/templates/documents/{slug}/render", name="document_template_render")
+    async def render_document_template(
+        request: Request,
+        slug: str,
+        project_slug: str = Form(...),
+    ) -> Response:
+        try:
+            data, filename = storage.render_document_template(slug, project_slug)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        except RuntimeError as exc:
+            raise HTTPException(status_code=500, detail=str(exc))
+        return Response(
+            content=data,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     @app.get("/projects/{slug}", response_class=HTMLResponse, name="project_overview")
     async def project_overview(request: Request, slug: str) -> HTMLResponse:
@@ -365,16 +442,18 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         loaded = safe_load_project(storage, slug)
         form = await request.form()
         title = str(form.get("title", "")).strip()
+        column = str(form.get("column", loaded.project.board_columns[0]))
+        if str(form.get("blocked", "")) == "on":
+            column = "Blocked"
         task = Task(
             title=title,
             description=str(form.get("description", "")).strip(),
-            column=str(form.get("column", loaded.project.board_columns[0])),
+            column=column,
             assignee_ids=form.getlist("assignee_ids"),
             start_date=parse_date(str(form.get("start_date", ""))),
             due_date=parse_date(str(form.get("due_date", ""))),
             milestone_id=str(form.get("milestone_id", "")) or None,
             priority=str(form.get("priority", Priority.MEDIUM.value)),
-            blocked=str(form.get("blocked", "")) == "on",
             notes=str(form.get("notes", "")).strip(),
         )
         loaded.project.tasks.append(task)
@@ -393,13 +472,15 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         task = find_item(loaded.project.tasks, task_id)
         task.title = str(form.get("title", "")).strip()
         task.description = str(form.get("description", "")).strip()
-        task.column = str(form.get("column", task.column))
+        new_column = str(form.get("column", task.column))
+        if str(form.get("blocked", "")) == "on":
+            new_column = "Blocked"
+        task.column = new_column
         task.assignee_ids = [str(item) for item in form.getlist("assignee_ids")]
         task.start_date = parse_date(str(form.get("start_date", "")))
         task.due_date = parse_date(str(form.get("due_date", "")))
         task.milestone_id = str(form.get("milestone_id", "")) or None
         task.priority = str(form.get("priority", Priority.MEDIUM.value))
-        task.blocked = str(form.get("blocked", "")) == "on"
         task.notes = str(form.get("notes", "")).strip()
         storage.save_project(
             loaded.project,
@@ -430,7 +511,6 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             return JSONResponse({"ok": False, "message": "Unknown board column."}, status_code=400)
         task = find_item(loaded.project.tasks, task_id)
         task.column = column
-        task.blocked = column == "Blocked"
         storage.save_project(
             loaded.project,
             loaded.sections,
@@ -811,12 +891,13 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
                 [item for item in loaded.project.milestones if item.target_date],
                 key=lambda item: item.target_date or date.max,
             ),
-            "blocked_tasks": [task for task in loaded.project.tasks if task.blocked or task.column == "Blocked"],
+            "blocked_tasks": [task for task in loaded.project.tasks if task.column == "Blocked"],
             "import_summary": loaded.import_summary,
             "validation_errors": loaded.validation_errors,
             "sync_notice": loaded.sync_notice,
             "tab_template": tab_template(active_tab),
             "export_mode": False,
+            "present_mode": active_tab == "view_mode",
         }
         return render_template(request, "project.html", context)
 
@@ -889,7 +970,64 @@ def build_portfolio_gantt(projects: list[Project], today: date) -> dict[str, Any
     if chart_start <= today <= chart_end:
         today_percent = ((today - chart_start).days / total_days) * 100
 
-    return {"rows": rows, "start": chart_start, "end": chart_end, "total_days": total_days, "today_percent": today_percent}
+    # Build month-tick markers for the time axis
+    axis_ticks: list[dict[str, Any]] = []
+    cursor = date(chart_start.year, chart_start.month, 1)
+    if cursor < chart_start:
+        # advance to next month
+        if cursor.month == 12:
+            cursor = date(cursor.year + 1, 1, 1)
+        else:
+            cursor = date(cursor.year, cursor.month + 1, 1)
+    while cursor <= chart_end:
+        offset_pct = ((cursor - chart_start).days / total_days) * 100
+        if 0 <= offset_pct <= 100:
+            axis_ticks.append(
+                {
+                    "label": cursor.strftime("%b") if cursor.month != 1 else cursor.strftime("%b %Y"),
+                    "offset": offset_pct,
+                }
+            )
+        if cursor.month == 12:
+            cursor = date(cursor.year + 1, 1, 1)
+        else:
+            cursor = date(cursor.year, cursor.month + 1, 1)
+
+    return {
+        "rows": rows,
+        "start": chart_start,
+        "end": chart_end,
+        "total_days": total_days,
+        "today_percent": today_percent,
+        "axis_ticks": axis_ticks,
+    }
+
+
+BUILTIN_TAG_KEYS: frozenset[str] = frozenset(
+    {
+        "project_name",
+        "project_description",
+        "project_status",
+        "project_health",
+        "project_start_date",
+        "project_end_date",
+        "today",
+        "people",
+        "milestones",
+    }
+)
+
+
+def serialize_document_template_fields(fields: list[DocumentTemplateField]) -> str:
+    """Inverse of parse_document_template_fields — used to seed the textarea editor."""
+    lines = []
+    for field in fields:
+        aliases = ",".join(field.aliases) if field.aliases else ""
+        required = "required" if field.required else "optional"
+        lines.append(
+            f"{field.key}|{field.label}|{field.field_type.value}|{aliases}|{required}|{field.value}"
+        )
+    return "\n".join(lines)
 
 
 def parse_document_template_fields(fields_text: str) -> list[DocumentTemplateField]:

@@ -3,23 +3,22 @@
 {% block title %}Dashboard | ProjStatus{% endblock %}
 
 {% block content %}
-  <section class="hero-panel">
+  <section class="page-heading compact">
     <div>
-      <p class="eyebrow">Portfolio dashboard</p>
-      <h1>See every project, risk, and milestone from one local workspace.</h1>
-      <p class="hero-copy">Your data stays in files. The app layers board editing, markdown, Mermaid, history, and exports on top.</p>
+      <p class="eyebrow">Portfolio</p>
+      <h1>Projects</h1>
     </div>
-    <a class="button button-primary" href="{{ request.url_for('project_new') }}">Create project</a>
+    <a class="button button-primary" href="{{ request.url_for('project_new') }}">+ New project</a>
   </section>
 
   <form class="filters card" method="get" action="{{ request.url_for('dashboard') }}">
     <label>
       Search
-      <input type="search" name="search" value="{{ search }}" placeholder="Find a project, owner, or role">
+      <input type="search" name="search" value="{{ search }}" placeholder="Find a project, owner, or role" oninput="this.form.submit()">
     </label>
     <label>
       Health
-      <select name="health">
+      <select name="health" onchange="this.form.submit()">
         <option value="">All</option>
         <option value="on-track" {% if health == 'on-track' %}selected{% endif %}>On Track</option>
         <option value="at-risk" {% if health == 'at-risk' %}selected{% endif %}>At Risk</option>
@@ -29,250 +28,245 @@
     </label>
     <label>
       Sort
-      <select name="sort">
+      <select name="sort" onchange="this.form.submit()">
         <option value="recent_update" {% if sort == 'recent_update' %}selected{% endif %}>Recent update</option>
         <option value="next_milestone" {% if sort == 'next_milestone' %}selected{% endif %}>Next milestone</option>
         <option value="end_date" {% if sort == 'end_date' %}selected{% endif %}>End date</option>
         <option value="name" {% if sort == 'name' %}selected{% endif %}>Name</option>
       </select>
     </label>
-    <label>
-      View
-      <select name="view">
-        <option value="cards" {% if view == 'cards' %}selected{% endif %}>Cards</option>
-        <option value="gantt" {% if view == 'gantt' %}selected{% endif %}>Gantt</option>
-        <option value="table" {% if view == 'table' %}selected{% endif %}>Table</option>
-      </select>
-    </label>
+    <div class="segmented" role="tablist">
+      {% for key, label in [('cards', 'Cards'), ('gantt', 'Gantt'), ('table', 'Table')] %}
+        <a class="{% if view == key %}is-active{% endif %}" href="{{ request.url_for('dashboard') }}?{% set qp = request.query_params %}view={{ key }}{% if search %}&search={{ search }}{% endif %}{% if health %}&health={{ health }}{% endif %}{% if sort %}&sort={{ sort }}{% endif %}{% if show_archived %}&show_archived=on{% endif %}">{{ label }}</a>
+      {% endfor %}
+    </div>
     <label class="checkbox-row checkbox-row-small filter-checkbox">
-      <input type="checkbox" name="show_archived" value="on" {% if show_archived %}checked{% endif %}>
-      Include archived projects
+      <input type="checkbox" name="show_archived" value="on" {% if show_archived %}checked{% endif %} onchange="this.form.submit()">
+      Include archived
     </label>
-    <button class="button" type="submit">Apply</button>
+    <input type="hidden" name="view" value="{{ view }}">
   </form>
 
   <section class="stats-grid">
-    <article class="stat-card">
+    <article class="stat-card stat-card-on-track">
       <span>On Track</span>
       <strong>{{ summary_cards.on_track }}</strong>
     </article>
-    <article class="stat-card warning">
+    <article class="stat-card stat-card-warning">
       <span>At Risk</span>
       <strong>{{ summary_cards.at_risk }}</strong>
     </article>
-    <article class="stat-card danger">
+    <article class="stat-card stat-card-danger">
       <span>Blocked</span>
       <strong>{{ summary_cards.blocked }}</strong>
     </article>
-    <article class="stat-card">
+    <article class="stat-card stat-card-accent">
       <span>Due Soon</span>
       <strong>{{ summary_cards.due_soon }}</strong>
     </article>
   </section>
 
-  <section class="dashboard-grid">
-    <div class="stack">
-      {% if projects %}
-        {% if view == "gantt" %}
-          <section class="card portfolio-gantt-card">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">Portfolio Gantt</p>
-                <h2>All project timelines</h2>
-              </div>
-              {% if portfolio_gantt.start %}
-                <span class="pill">{{ portfolio_gantt.start }} to {{ portfolio_gantt.end }}</span>
-              {% endif %}
-            </div>
-            {% if portfolio_gantt.rows %}
-              <div class="portfolio-gantt">
-                {% for row in portfolio_gantt.rows %}
-                  <div class="gantt-row">
-                    <div class="gantt-row-label">
-                      <a href="{{ request.url_for('project_overview', slug=row.slug) }}">{{ row.name }}</a>
-                      <span>{{ row.start }} to {{ row.end }}</span>
-                    </div>
-                    <div class="gantt-track">
-                      {% if portfolio_gantt.today_percent is not none %}
-                        <span class="gantt-today" style="left: {{ portfolio_gantt.today_percent }}%"></span>
-                      {% endif %}
-                      <a
-                        class="gantt-bar gantt-health-{{ row.health }}"
-                        href="{{ request.url_for('project_overview', slug=row.slug) }}"
-                        style="left: {{ row.offset }}%; width: {{ row.width }}%"
-                        title="{{ row.name }}: {{ row.start }} to {{ row.end }}"
-                      >
-                        <span>{{ row.status }}</span>
-                      </a>
-                      {% for milestone in row.milestones %}
-                        <span
-                          class="gantt-milestone gantt-milestone-{{ milestone.status }}"
-                          style="left: {{ milestone.offset }}%"
-                          title="{{ milestone.title }} - {{ milestone.date }}"
-                        ></span>
-                      {% endfor %}
-                    </div>
-                  </div>
+  {% if not projects %}
+    <article class="card empty-state">
+      <h2>No projects yet</h2>
+      <p>Create your first project to start tracking tasks, milestones, files, and exports.</p>
+      <a class="button button-primary" href="{{ request.url_for('project_new') }}">Create project</a>
+    </article>
+  {% elif view == "gantt" %}
+    <section class="card portfolio-gantt-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Portfolio Gantt</p>
+          <h2>All project timelines</h2>
+        </div>
+        {% if portfolio_gantt.start %}<span class="pill">{{ portfolio_gantt.start }} → {{ portfolio_gantt.end }}</span>{% endif %}
+      </div>
+      {% if portfolio_gantt.rows %}
+        <div class="portfolio-gantt portfolio-gantt-wide">
+          {% if portfolio_gantt.axis_ticks %}
+            <div class="gantt-row gantt-axis-row">
+              <div class="gantt-row-label gantt-row-label-axis"></div>
+              <div class="gantt-axis">
+                {% for tick in portfolio_gantt.axis_ticks %}
+                  <span class="gantt-axis-tick" style="left: {{ tick.offset }}%;">{{ tick.label }}</span>
                 {% endfor %}
               </div>
-            {% else %}
-              <p class="muted">Add project start or end dates to build the portfolio Gantt chart.</p>
-            {% endif %}
-          </section>
-        {% elif view == "table" %}
-          <section class="card portfolio-table-card">
-            <div class="section-heading">
-              <div>
-                <p class="eyebrow">Portfolio table</p>
-                <h2>Project comparison</h2>
+            </div>
+          {% endif %}
+          {% for row in portfolio_gantt.rows %}
+            <div class="gantt-row">
+              <div class="gantt-row-label">
+                <a href="{{ request.url_for('project_overview', slug=row.slug) }}">{{ row.name }}</a>
+                <span>{{ row.start }} → {{ row.end }}</span>
+              </div>
+              <div class="gantt-track">
+                {% if portfolio_gantt.today_percent is not none %}
+                  <span class="gantt-today" style="left: {{ portfolio_gantt.today_percent }}%"></span>
+                {% endif %}
+                <a class="gantt-bar gantt-health-{{ row.health }}" href="{{ request.url_for('project_overview', slug=row.slug) }}" style="left: {{ row.offset }}%; width: {{ row.width }}%" title="{{ row.name }}: {{ row.start }} to {{ row.end }}">
+                  <span>{{ row.name }}</span>
+                </a>
+                {% for milestone in row.milestones %}
+                  <span class="gantt-milestone gantt-milestone-{{ milestone.status }}" style="left: {{ milestone.offset }}%" title="{{ milestone.title }} — {{ milestone.date }}"></span>
+                {% endfor %}
               </div>
             </div>
-            <div class="portfolio-table-wrap">
-              <table class="portfolio-table">
-                <thead>
-                  <tr>
-                    <th>Project</th>
-                    <th>Health</th>
-                    <th>Status</th>
-                    <th>Dates</th>
-                    <th>Owners</th>
-                    <th>Roadblocks</th>
-                    <th>Next milestone</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {% for project in projects %}
-                    <tr>
-                      <td><a href="{{ request.url_for('project_overview', slug=project.slug) }}">{{ project.name }}</a></td>
-                      <td>{{ project.health.value }}</td>
-                      <td>{{ project.status.value }}</td>
-                      <td>{{ project.start_date or "-" }} to {{ project.end_date or "-" }}</td>
-                      <td>{{ project.owner_names|join(", ") if project.owner_names else "None yet" }}</td>
-                      <td>{{ project.roadblock_count }}</td>
-                      <td>{{ project.next_milestone.title if project.next_milestone else "No milestone" }}</td>
-                    </tr>
-                  {% endfor %}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        {% else %}
-          {% for project in projects %}
-            <article class="card project-card {% if project.archived %}project-card-archived{% endif %}">
-              <div class="project-card-header project-card-header-rich">
-                <div class="project-card-identity">
-                  <div class="logo-frame">
-                    {% if project.has_logo %}
-                      <img src="{{ request.url_for('project_logo', slug=project.slug) }}" alt="{{ project.name }} logo">
+          {% endfor %}
+        </div>
+        <div class="gantt-legend">
+          <span class="legend-item"><span class="swatch swatch-on-track"></span>On track</span>
+          <span class="legend-item"><span class="swatch swatch-at-risk"></span>At risk</span>
+          <span class="legend-item"><span class="swatch swatch-blocked"></span>Blocked</span>
+          <span class="legend-item"><span class="swatch swatch-complete"></span>Complete</span>
+          <span class="legend-item"><span class="swatch swatch-today"></span>Today</span>
+        </div>
+      {% else %}
+        <p class="muted">Add project start or end dates to build the portfolio Gantt chart.</p>
+      {% endif %}
+    </section>
+  {% elif view == "table" %}
+    <section class="card portfolio-table-card">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Portfolio table</p>
+          <h2>Project comparison</h2>
+        </div>
+      </div>
+      <div class="portfolio-table-wrap">
+        <table class="portfolio-table">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>Health</th>
+              <th>Dates</th>
+              <th>Owners</th>
+              <th>Roadblocks</th>
+              <th>Next milestone</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for project in projects %}
+              <tr>
+                <td><a href="{{ request.url_for('project_overview', slug=project.slug) }}">{{ project.name }}</a></td>
+                <td><span class="health-cell health-{{ project.health.value }}">{{ project.health.value }}</span></td>
+                <td>{% if project.start_date or project.end_date %}{{ project.start_date or '—' }} → {{ project.end_date or '—' }}{% else %}—{% endif %}</td>
+                <td>{{ project.owner_names|join(", ") if project.owner_names else "—" }}</td>
+                <td>{{ project.roadblock_count if project.roadblock_count else "—" }}</td>
+                <td>{{ project.next_milestone.title if project.next_milestone else "—" }}</td>
+                <td>{{ project.recent_addendum_at | when }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% else %}
+    <section class="dashboard-grid">
+      <div class="stack">
+        {% for project in projects %}
+          <article class="card project-card {% if project.archived %}project-card-archived{% endif %}">
+            <div class="project-card-header project-card-header-rich">
+              <div class="project-card-identity">
+                <div class="logo-frame">
+                  {% if project.has_logo %}
+                    <img src="{{ request.url_for('project_logo', slug=project.slug) }}" alt="{{ project.name }} logo">
+                  {% else %}
+                    <span>{{ project.name[:2].upper() }}</span>
+                  {% endif %}
+                </div>
+                <div class="project-card-copy-block">
+                  <div class="project-card-title-row">
+                    <span class="health-badge health-{{ project.health.value }}">{{ project.health.value }}</span>
+                    {% if project.archived %}<span class="pill pill-muted">Archived</span>{% endif %}
+                  </div>
+                  <h2><a href="{{ request.url_for('project_overview', slug=project.slug) }}">{{ project.name }}</a></h2>
+                  {% if project.description %}<p class="project-card-copy">{{ project.description }}</p>{% endif %}
+                </div>
+              </div>
+              <div class="card-actions">
+                <a class="button button-primary" href="{{ request.url_for('project_overview', slug=project.slug) }}">Open</a>
+                <details class="menu">
+                  <summary aria-label="More actions">⋯</summary>
+                  <div class="menu-panel">
+                    <a href="{{ request.url_for('project_view', slug=project.slug) }}">Present</a>
+                    <a href="{{ request.url_for('project_board', slug=project.slug) }}">Board</a>
+                    <a href="{{ request.url_for('exports') }}?project={{ project.slug }}">Export</a>
+                    <form method="post" action="{{ request.url_for('project_duplicate', slug=project.slug) }}">
+                      <input type="hidden" name="new_name" value="{{ project.name }} Copy">
+                      <input type="hidden" name="change_note" value="Duplicated from dashboard">
+                      <button type="submit">Duplicate</button>
+                    </form>
+                    {% if project.archived %}
+                      <form method="post" action="{{ request.url_for('project_unarchive', slug=project.slug) }}">
+                        <input type="hidden" name="return_to" value="{{ request.url.path }}">
+                        <button type="submit">Unarchive</button>
+                      </form>
                     {% else %}
-                      <span>{{ project.name[:2].upper() }}</span>
+                      <form method="post" action="{{ request.url_for('project_archive', slug=project.slug) }}">
+                        <input type="hidden" name="return_to" value="{{ request.url.path }}">
+                        <button type="submit">Archive</button>
+                      </form>
                     {% endif %}
                   </div>
-                  <div class="project-card-copy-block">
-                    <div class="project-card-title-row">
-                      <p class="eyebrow">{{ project.health.value }}</p>
-                      {% if project.archived %}
-                        <span class="pill pill-muted">Archived</span>
-                      {% endif %}
-                    </div>
-                    <h2><a href="{{ request.url_for('project_overview', slug=project.slug) }}">{{ project.name }}</a></h2>
-                    <p class="project-card-copy">{{ project.description or "No description yet." }}</p>
-                  </div>
-                </div>
-                <div class="button-cluster">
-                  <a class="button button-subtle" href="{{ request.url_for('project_overview', slug=project.slug) }}">Open</a>
-                  <a class="button button-subtle" href="{{ request.url_for('project_view', slug=project.slug) }}">View mode</a>
-                  <a class="button button-subtle" href="{{ request.url_for('project_board', slug=project.slug) }}">Board</a>
-                </div>
+                </details>
               </div>
+            </div>
 
-              <dl class="project-meta-grid">
-                <div><dt>Status</dt><dd>{{ project.status.value }}</dd></div>
-                <div><dt>Dates</dt><dd>{{ project.start_date or "-" }} to {{ project.end_date or "-" }}</dd></div>
-                <div><dt>Owners</dt><dd>{{ project.owner_names|join(", ") if project.owner_names else "None yet" }}</dd></div>
-                <div><dt>Roadblocks</dt><dd>{{ project.roadblock_count }}</dd></div>
-                <div><dt>Next milestone</dt><dd>{{ project.next_milestone.title if project.next_milestone else "No milestone" }}</dd></div>
-                <div><dt>Recent change</dt><dd>{{ project.recent_addendum_at or "-" }}</dd></div>
-              </dl>
+            <dl class="project-meta-grid">
+              {% if project.start_date or project.end_date %}<div><dt>Dates</dt><dd>{{ project.start_date or '—' }} → {{ project.end_date or '—' }}</dd></div>{% endif %}
+              {% if project.owner_names %}<div><dt>Owners</dt><dd>{{ project.owner_names|join(", ") }}</dd></div>{% endif %}
+              {% if project.roadblock_count %}<div><dt>Roadblocks</dt><dd>{{ project.roadblock_count }}</dd></div>{% endif %}
+              {% if project.next_milestone %}<div><dt>Next</dt><dd>{{ project.next_milestone.title }}{% if project.next_milestone.target_date %} · {{ project.next_milestone.target_date }}{% endif %}</dd></div>{% endif %}
+              {% if project.recent_addendum_at %}<div><dt>Updated</dt><dd>{{ project.recent_addendum_at | when }}</dd></div>{% endif %}
+            </dl>
+          </article>
+        {% endfor %}
+      </div>
 
-              <div class="project-card-footer">
-                <form class="inline-actions" method="post" action="{{ request.url_for('project_duplicate', slug=project.slug) }}">
-                  <input type="hidden" name="new_name" value="{{ project.name }} Copy">
-                  <input type="hidden" name="change_note" value="Duplicated from dashboard">
-                  <button class="button button-subtle" type="submit">Duplicate</button>
-                </form>
-                {% if project.archived %}
-                  <form class="inline-actions" method="post" action="{{ request.url_for('project_unarchive', slug=project.slug) }}">
-                    <input type="hidden" name="return_to" value="{{ request.url.path }}">
-                    <button class="button" type="submit">Unarchive</button>
-                  </form>
-                {% else %}
-                  <form class="inline-actions" method="post" action="{{ request.url_for('project_archive', slug=project.slug) }}">
-                    <input type="hidden" name="return_to" value="{{ request.url.path }}">
-                    <button class="button" type="submit">Archive</button>
-                  </form>
-                {% endif %}
-              </div>
-            </article>
-          {% endfor %}
-        {% endif %}
-      {% else %}
-        <article class="card empty-state">
-          <h2>No projects yet</h2>
-          <p>Create your first project to start tracking tasks, milestones, files, and exports.</p>
-          <a class="button button-primary" href="{{ request.url_for('project_new') }}">Create project</a>
-        </article>
-      {% endif %}
-    </div>
+      <aside class="stack">
+        <section class="card">
+          <h3>Upcoming milestones</h3>
+          {% if upcoming_milestones %}
+            <ul class="simple-list">
+              {% for slug, milestone in upcoming_milestones %}
+                <li>
+                  <a href="{{ request.url_for('project_overview', slug=slug) }}">{{ milestone.title }}</a>
+                  <span>{{ milestone.target_date }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}<p class="muted">—</p>{% endif %}
+        </section>
 
-    <aside class="stack">
-      <section class="card">
-        <h2>Upcoming milestones</h2>
-        {% if upcoming_milestones %}
-          <ul class="simple-list">
-            {% for slug, milestone in upcoming_milestones %}
-              <li>
-                <a href="{{ request.url_for('project_overview', slug=slug) }}">{{ milestone.title }}</a>
-                <span>{{ milestone.target_date }}</span>
-              </li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <p class="muted">No upcoming milestones yet.</p>
-        {% endif %}
-      </section>
-
-      <section class="card">
-        <h2>Blocked tasks</h2>
         {% if blocked_tasks %}
-          <ul class="simple-list">
-            {% for slug, task in blocked_tasks %}
-              <li>
-                <a href="{{ request.url_for('project_board', slug=slug) }}">{{ task.title }}</a>
-                <span>{{ slug }}</span>
-              </li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <p class="muted">No blocked tasks.</p>
+          <section class="card">
+            <h3>Blocked tasks</h3>
+            <ul class="simple-list">
+              {% for slug, task in blocked_tasks %}
+                <li>
+                  <a href="{{ request.url_for('project_board', slug=slug) }}">{{ task.title }}</a>
+                  <span>{{ slug }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          </section>
         {% endif %}
-      </section>
 
-      <section class="card">
-        <h2>Recent addendums</h2>
-        {% if recent_addendums %}
-          <ul class="simple-list">
-            {% for slug, addendum in recent_addendums %}
-              <li>
-                <a href="{{ request.url_for('project_history', slug=slug) }}?entry={{ addendum.id }}">{{ addendum.summary[0] }}</a>
-                <span>{{ addendum.created_at }}</span>
-              </li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <p class="muted">History will appear here after the first save.</p>
-        {% endif %}
-      </section>
-    </aside>
-  </section>
+        <section class="card">
+          <h3>Recent activity</h3>
+          {% if recent_addendums %}
+            <ul class="simple-list">
+              {% for slug, addendum in recent_addendums %}
+                <li>
+                  <a href="{{ request.url_for('project_history', slug=slug) }}?entry={{ addendum.id }}">{{ addendum.summary[0] }}</a>
+                  <span>{{ addendum.created_at | when }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}<p class="muted">History will appear here after the first save.</p>{% endif %}
+        </section>
+      </aside>
+    </section>
+  {% endif %}
 {% endblock %}
