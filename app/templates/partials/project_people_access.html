@@ -69,16 +69,22 @@
 
     {% for category in project.access_links %}
       <details class="accordion" open>
-        <summary>{{ category.name }}</summary>
-        <form class="inline-actions" method="post" action="{{ request.url_for('access_category_update', slug=project.slug, category_id=category.id) }}">
-          <input type="text" name="name" value="{{ category.name }}" required>
-          <input type="text" name="change_note" placeholder="Rename note">
-          <button class="button" type="submit">Rename</button>
-        </form>
-        <form class="inline-actions" method="post" action="{{ request.url_for('access_category_delete', slug=project.slug, category_id=category.id) }}">
-          <input type="text" name="change_note" placeholder="Delete note">
-          <button class="button button-danger" type="submit">Delete category</button>
-        </form>
+        <summary class="accordion-head">
+          <strong>{{ category.name }}</strong>
+          <span class="muted">· {{ category.links|length }} link{{ '' if category.links|length == 1 else 's' }}</span>
+        </summary>
+        <div class="category-tools">
+          <form class="rename-row" method="post" action="{{ request.url_for('access_category_update', slug=project.slug, category_id=category.id) }}">
+            <label class="rename-label">
+              Rename category
+              <input type="text" name="name" value="{{ category.name }}" required>
+            </label>
+            <button class="button button-primary" type="submit">Save name</button>
+          </form>
+          <form class="inline-actions delete-row" method="post" action="{{ request.url_for('access_category_delete', slug=project.slug, category_id=category.id) }}" onsubmit="return confirm('Delete the {{ category.name }} category and all its links?');">
+            <button class="button button-subtle button-danger" type="submit">Delete category</button>
+          </form>
+        </div>
 
         {% if category.links %}
           {% for link in category.links %}

@@ -177,3 +177,43 @@ def test_project_and_document_templates(tmp_path: Path) -> None:
     assert document.completion_percent == 50
     assert document.missing_fields[0].key == "part_number"
     assert storage.list_document_templates()[0].fields[0].aliases == ["PN", "Item Number"]
+
+
+def test_section_round_trip_does_not_grow_newlines(tmp_path: Path) -> None:
+    """Regression: saving a section with CRLF line endings should not double newlines.
+
+    Before the fix, Path.write_text on Windows translated \\n to \\r\\n while leaving
+    existing \\r alone. Each round trip then grew runs of newlines exponentially.
+    """
+    storage = make_storage(tmp_path)
+    project = storage.create_project("Newline Project")
+    crlf_body = "first paragraph\r\n\r\nsecond paragraph\r\n"
+
+    loaded = storage.load_project(project.slug)
+    loaded.sections["notes"] = crlf_body.replace("\r\n", "\n").replace("\r", "\n")
+    storage.save_project(loaded.project, loaded.sections, note="first save")
+
+    # save 4 more times to exercise the exponential-growth path
+    for _ in range(4):
+        loaded = storage.load_project(project.slug)
+        storage.save_project(loaded.project, loaded.sections, note="re-save")
+
+    final = storage.load_project(project.slug).sections["notes"]
+    # exactly one blank line between paragraphs, no growth
+    assert "\r" not in final
+    assert "\n\n\n" not in final
+    assert final.count("\n\n") == 1
+
+
+def test_load_project_heals_existing_corruption(tmp_path: Path) -> None:
+    """If a section file already has 4+ consecutive newlines on disk,
+    load_project should collapse them down to 2 paragraph breaks."""
+    storage = make_storage(tmp_path)
+    project = storage.create_project("Heal Project")
+
+    # write corrupted notes directly (simulating damage from prior bug)
+    (tmp_path / "projects" / project.slug / "notes.md").write_text(
+        "intro\n\n\n\n\n\nbody\n", encoding="utf-8", newline="\n"
+    )
+    loaded = storage.load_project(project.slug)
+    assert loaded.sections["notes"] == "intro\n\nbody\n"

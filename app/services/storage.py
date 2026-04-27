@@ -34,6 +34,31 @@ from app.utils import dumps_pretty, now_stamp, sha1_text, slugify
 SECTION_NAMES: tuple[SectionName, ...] = ("content", "change_requests", "roadblocks", "notes")
 
 
+def _write_text(path: Path, content: str) -> None:
+    """Write text to disk with explicit \\n line endings.
+
+    Default `Path.write_text` uses universal-newlines mode, which on Windows
+    translates \\n -> \\r\\n on write. Combined with read-time translation,
+    it doubles every CR-bearing newline on each round-trip — a slow-growing
+    corruption of section markdown and timeline files. Using newline="\\n"
+    keeps content stable across saves regardless of platform.
+    """
+    path.write_text(content, encoding="utf-8", newline="\n")
+
+
+def _heal_section_text(text: str) -> str:
+    """Collapse runs of >= 4 consecutive newlines down to 2.
+
+    Repairs files damaged by the legacy \\r\\n round-trip bug. Two consecutive
+    newlines (a paragraph break) is the most a markdown source ever needs, so
+    anything beyond that is corruption rather than intent.
+    """
+    if not text:
+        return text
+    import re as _re
+    return _re.sub(r"\n{4,}", "\n\n", text)
+
+
 class StorageService:
     def __init__(self, config: AppConfig) -> None:
         self.config = config
@@ -196,9 +221,9 @@ class StorageService:
                 timeline_text=loaded.timeline_text,
             ),
         )
-        (self.config.project_templates_dir / f"{slug}.json").write_text(
+        _write_text(
+            self.config.project_templates_dir / f"{slug}.json",
             dumps_pretty(template.model_dump(mode="json")),
-            encoding="utf-8",
         )
         return template
 
@@ -217,9 +242,9 @@ class StorageService:
         return template
 
     def save_document_template(self, template: DocumentTemplate) -> None:
-        (self.config.document_templates_dir / f"{template.slug}.json").write_text(
+        _write_text(
+            self.config.document_templates_dir / f"{template.slug}.json",
             dumps_pretty(template.model_dump(mode="json")),
-            encoding="utf-8",
         )
 
     def load_document_template(self, slug: str) -> DocumentTemplate:
@@ -368,7 +393,12 @@ class StorageService:
             validation_errors.append(f"Invalid project.json detected. Loaded last good snapshot instead: {exc}")
         project = stored_project.model_copy(deep=True)
 
-        sections = {section: self._section_path(project_dir, section).read_text(encoding="utf-8") if self._section_path(project_dir, section).exists() else "" for section in SECTION_NAMES}
+        sections = {
+            section: _heal_section_text(self._section_path(project_dir, section).read_text(encoding="utf-8"))
+            if self._section_path(project_dir, section).exists()
+            else ""
+            for section in SECTION_NAMES
+        }
         timeline_path = project_dir / "timeline.mmd"
         timeline_text = timeline_path.read_text(encoding="utf-8") if timeline_path.exists() else render_timeline(project)
 
@@ -433,12 +463,12 @@ class StorageService:
         before = self._latest_snapshot(project_dir)
 
         for section_name in SECTION_NAMES:
-            self._section_path(project_dir, section_name).write_text(sections.get(section_name, ""), encoding="utf-8")
+            _write_text(self._section_path(project_dir, section_name), sections.get(section_name, ""))
 
         timeline_path = project_dir / "timeline.mmd"
         current_timeline = timeline_path.read_text(encoding="utf-8") if timeline_path.exists() else ""
         final_timeline = current_timeline if preserve_timeline and current_timeline else timeline_text or render_timeline(project)
-        timeline_path.write_text(final_timeline, encoding="utf-8")
+        _write_text(timeline_path, final_timeline)
 
         project.sync_state.project_hash = ""
         project.sync_state.timeline_hash = sha1_text(final_timeline)
@@ -452,16 +482,13 @@ class StorageService:
         project_path = project_dir / "project.json"
         project.sync_state.project_hash = self._project_signature(project)
         project_json = dumps_pretty(project.model_dump(mode="json"))
-        project_path.write_text(project_json, encoding="utf-8")
+        _write_text(project_path, project_json)
 
         snapshot = ProjectSnapshot(project=project.model_copy(deep=True), sections=sections.copy(), timeline_text=final_timeline)
         entry_id = now_stamp()
         addendum = build_addendum(entry_id, datetime.now(), note, actor, before, snapshot)
-        (history_dir / f"{entry_id}.json").write_text(
-            dumps_pretty(addendum.model_dump(mode="json")),
-            encoding="utf-8",
-        )
-        (history_dir / f"{entry_id}.md").write_text(render_addendum_markdown(addendum), encoding="utf-8")
+        _write_text(history_dir / f"{entry_id}.json", dumps_pretty(addendum.model_dump(mode="json")))
+        _write_text(history_dir / f"{entry_id}.md", render_addendum_markdown(addendum))
         return addendum
 
     def restore_history(self, slug: str, addendum_id: str, note: str = "") -> Addendum:

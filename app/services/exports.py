@@ -70,7 +70,7 @@ class ExportService:
             export_mode=True,
         )
         output_path = batch_dir / f"{slug}.html"
-        output_path.write_text(html, encoding="utf-8")
+        output_path.write_text(html, encoding="utf-8", newline="\n")
         return output_path
 
     def _write_png_export(self, html_path: Path, output_path: Path) -> ExportResult:

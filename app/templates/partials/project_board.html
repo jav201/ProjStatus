@@ -28,11 +28,20 @@
               {% for milestone in project.milestones %}<option value="{{ milestone.id }}">{{ milestone.title }}</option>{% endfor %}
             </select>
           </label>
-          <label class="full-span">Assignees
-            <select name="assignee_ids" multiple size="3">
-              {% for person in project.people %}<option value="{{ person.id }}">{{ person.name }}</option>{% endfor %}
-            </select>
-          </label>
+          <fieldset class="full-span assignee-picker">
+            <legend>Assignees</legend>
+            {% if project.people %}
+              {% for person in project.people %}
+                <label class="assignee-option">
+                  <input type="checkbox" name="assignee_ids" value="{{ person.id }}">
+                  <span>{{ person.name }}</span>
+                </label>
+              {% endfor %}
+              <small class="muted">Tick each person to assign them.</small>
+            {% else %}
+              <small class="muted">Add people on the People tab first.</small>
+            {% endif %}
+          </fieldset>
           <div class="full-span"><button class="button button-primary" type="submit">Add task</button></div>
         </form>
       </div>
@@ -115,11 +124,20 @@
         {% for milestone in project.milestones %}<option value="{{ milestone.id }}">{{ milestone.title }}</option>{% endfor %}
       </select>
     </label>
-    <label class="full-span">Assignees
-      <select name="assignee_ids" multiple size="4">
-        {% for person in project.people %}<option value="{{ person.id }}">{{ person.name }}</option>{% endfor %}
-      </select>
-    </label>
+    <fieldset class="full-span assignee-picker">
+      <legend>Assignees</legend>
+      {% if project.people %}
+        {% for person in project.people %}
+          <label class="assignee-option">
+            <input type="checkbox" name="assignee_ids" value="{{ person.id }}">
+            <span>{{ person.name }}</span>
+          </label>
+        {% endfor %}
+        <small class="muted">Tick each person to assign them.</small>
+      {% else %}
+        <small class="muted">Add people on the People tab first.</small>
+      {% endif %}
+    </fieldset>
     <label class="full-span">Notes<input type="text" name="notes"></label>
     <label class="full-span">Addendum note<input type="text" name="change_note" placeholder="Why this change?"></label>
     <div class="full-span actions-row">
