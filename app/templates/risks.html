@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Risks &amp; roadblocks | ProjStatus{% endblock %}
+
+{% block content %}
+  <section class="page-heading compact">
+    <div>
+      <p class="eyebrow">Risks</p>
+      <h1>Risks &amp; roadblocks</h1>
+    </div>
+    <span class="muted">{{ blocked_rows|length }} blocked task{{ '' if blocked_rows|length == 1 else 's' }} · {{ roadblock_notes|length }} project{{ '' if roadblock_notes|length == 1 else 's' }} with notes</span>
+  </section>
+
+  <section class="grid-two">
+    <article class="card">
+      <h2>Blocked tasks</h2>
+      {% if blocked_rows %}
+        <table class="risk-table">
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>Project</th>
+              <th>Days</th>
+              <th>Owners</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in blocked_rows %}
+              <tr>
+                <td>
+                  <a href="{{ request.url_for('project_board', slug=row.project_slug) }}">
+                    <strong>{{ row.task.title }}</strong>
+                  </a>
+                  {% if row.task.notes %}<small class="muted">{{ row.task.notes }}</small>{% endif %}
+                </td>
+                <td>
+                  <span>{{ row.project_name }}</span>
+                  <small class="muted">{{ row.project_slug }}</small>
+                </td>
+                <td>
+                  {% if row.days_blocked is not none %}
+                    <span class="chip-danger" title="Blocked since {{ row.days_blocked }}d ago">{{ row.days_blocked }}d</span>
+                  {% else %}—{% endif %}
+                </td>
+                <td>
+                  {% if row.assignees %}
+                    <div class="assignee-row">
+                      {% for person in row.assignees %}
+                        <span class="assignee-chip" title="{{ person.name }}">{{ person.name.split()[0][:1] ~ (person.name.split()[1][:1] if person.name.split()|length > 1 else '') }}</span>
+                      {% endfor %}
+                    </div>
+                  {% else %}—{% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="muted">No tasks in the Blocked column. ✅</p>
+      {% endif %}
+    </article>
+
+    <article class="card">
+      <h2>Roadblock notes</h2>
+      {% if roadblock_notes %}
+        <div class="stack">
+          {% for note in roadblock_notes %}
+            <section>
+              <h3>
+                <a href="{{ request.url_for('project_section', slug=note.slug, section='roadblocks') }}">{{ note.name }}</a>
+                <small class="muted">{{ note.slug }}</small>
+              </h3>
+              <div class="markdown-body">{{ note.text | markdownify | safe }}</div>
+            </section>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted">No project has roadblock notes yet.</p>
+      {% endif %}
+    </article>
+  </section>
+{% endblock %}

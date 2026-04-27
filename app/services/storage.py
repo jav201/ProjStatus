@@ -4,7 +4,7 @@ import json
 import re
 import shutil
 import zipfile
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -77,6 +77,54 @@ class StorageService:
                 items.append((project_dir.name, addendum))
         items.sort(key=lambda item: item[1].created_at, reverse=True)
         return items[:limit]
+
+    def kpi_snapshot_history(self, days: int = 14) -> list[dict[str, int]]:
+        """Reconstruct daily KPI counts for the trailing `days` calendar days.
+
+        For each day we walk every project's history and use the most recent
+        addendum *whose snapshot's date <= that day* to determine that
+        project's health on that day. Missing days fall back to the
+        earliest snapshot. The result is a list newest-first reversed —
+        index 0 = day-(days-1), index -1 = today.
+        """
+        today = date.today()
+        snapshots: list[dict[str, int]] = []
+        per_project_history: list[list[Addendum]] = []
+        for project_dir in self.config.projects_dir.glob("*"):
+            if not project_dir.is_dir():
+                continue
+            loaded = self.load_project(project_dir.name)
+            if loaded.project.archived:
+                continue
+            per_project_history.append(loaded.addendums)
+        for offset in range(days - 1, -1, -1):
+            target = today - timedelta(days=offset)
+            buckets = {"on_track": 0, "at_risk": 0, "blocked": 0, "due_soon": 0}
+            for history in per_project_history:
+                snapshot_addendum = None
+                for addendum in history:  # history is newest-first
+                    if addendum.created_at.date() <= target:
+                        snapshot_addendum = addendum
+                        break
+                if snapshot_addendum is None and history:
+                    snapshot_addendum = history[-1]
+                if snapshot_addendum is None:
+                    continue
+                project_at_target = snapshot_addendum.snapshot.project
+                health = project_at_target.health.value
+                if health == "on-track":
+                    buckets["on_track"] += 1
+                elif health == "at-risk":
+                    buckets["at_risk"] += 1
+                elif health == "blocked":
+                    buckets["blocked"] += 1
+                # due_soon: any milestone target_date in [target, target+7d]
+                for milestone in project_at_target.milestones:
+                    if milestone.target_date and target <= milestone.target_date <= target + timedelta(days=7):
+                        buckets["due_soon"] += 1
+                        break
+            snapshots.append(buckets)
+        return snapshots
 
     def create_project(self, name: str, description: str = "", start_date: date | None = None, end_date: date | None = None) -> Project:
         slug = self._unique_slug(slugify(name))
