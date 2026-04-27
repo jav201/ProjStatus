@@ -15,6 +15,7 @@ from app.config import AppConfig
 from app.models import (
     AccessCategory,
     AccessLink,
+    DictionaryEntry,
     DocumentFieldType,
     DocumentTemplateField,
     ExportFormat,
@@ -371,9 +372,18 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
     async def project_view(request: Request, slug: str) -> HTMLResponse:
         return await render_project_page(request, slug, "view_mode")
 
-    @app.get("/projects/{slug}/people-access", response_class=HTMLResponse, name="project_people_access")
-    async def project_people_access(request: Request, slug: str) -> HTMLResponse:
-        return await render_project_page(request, slug, "people_access")
+    @app.get("/projects/{slug}/people", response_class=HTMLResponse, name="project_people")
+    async def project_people(request: Request, slug: str) -> HTMLResponse:
+        return await render_project_page(request, slug, "people")
+
+    @app.get("/projects/{slug}/dictionary", response_class=HTMLResponse, name="project_dictionary")
+    async def project_dictionary(request: Request, slug: str) -> HTMLResponse:
+        return await render_project_page(request, slug, "dictionary")
+
+    @app.get("/projects/{slug}/people-access", name="project_people_access")
+    async def project_people_access_legacy(request: Request, slug: str) -> RedirectResponse:
+        # back-compat redirect for any saved bookmarks / addendum links
+        return RedirectResponse(request.url_for("project_people", slug=slug), status_code=308)
 
     @app.get("/projects/{slug}/sections/{section}", response_class=HTMLResponse, name="project_section")
     async def project_section(request: Request, slug: str, section: str) -> HTMLResponse:
@@ -636,7 +646,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             note=change_note.strip() or f"Added person '{name.strip()}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
         )
-        return redirect_to(request.url_for("project_people_access", slug=slug), "Person added.", "success")
+        return redirect_to(request.url_for("project_people", slug=slug), "Person added.", "success")
 
     @app.post("/projects/{slug}/people/{person_id}", name="person_update")
     async def update_person(
@@ -659,7 +669,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             note=change_note.strip() or f"Updated person '{person.name}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
         )
-        return redirect_to(request.url_for("project_people_access", slug=slug), "Person updated.", "success")
+        return redirect_to(request.url_for("project_people", slug=slug), "Person updated.", "success")
 
     @app.post("/projects/{slug}/people/{person_id}/delete", name="person_delete")
     async def delete_person(
@@ -675,7 +685,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         should_clear = clear_assignments == "on"
         if assignments and not (replacement_person_id or should_clear):
             return redirect_to(
-                request.url_for("project_people_access", slug=slug),
+                request.url_for("project_people", slug=slug),
                 "This person still owns project items. Choose a replacement or clear assignments before deleting.",
                 "error",
             )
@@ -699,7 +709,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             note=change_note.strip() or "Deleted person",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
         )
-        return redirect_to(request.url_for("project_people_access", slug=slug), "Person deleted.", "success")
+        return redirect_to(request.url_for("project_people", slug=slug), "Person deleted.", "success")
 
     @app.post("/projects/{slug}/access-categories", name="access_category_create")
     async def create_access_category(
@@ -716,7 +726,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             note=change_note.strip() or f"Added access category '{name.strip()}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
         )
-        return redirect_to(request.url_for("project_people_access", slug=slug), "Access category added.", "success")
+        return redirect_to(request.url_for("project_dictionary", slug=slug), "Access category added.", "success")
 
     @app.post("/projects/{slug}/access-categories/{category_id}", name="access_category_update")
     async def update_access_category(
@@ -735,7 +745,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             note=change_note.strip() or f"Renamed access category to '{category.name}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
         )
-        return redirect_to(request.url_for("project_people_access", slug=slug), "Access category updated.", "success")
+        return redirect_to(request.url_for("project_dictionary", slug=slug), "Access category updated.", "success")
 
     @app.post("/projects/{slug}/access-categories/{category_id}/delete", name="access_category_delete")
     async def delete_access_category(
@@ -748,7 +758,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         category = find_item(loaded.project.access_links, category_id)
         if category.links:
             return redirect_to(
-                request.url_for("project_people_access", slug=slug),
+                request.url_for("project_dictionary", slug=slug),
                 "Remove links from a category before deleting it.",
                 "error",
             )
@@ -759,7 +769,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             note=change_note.strip() or "Deleted access category",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
         )
-        return redirect_to(request.url_for("project_people_access", slug=slug), "Access category deleted.", "success")
+        return redirect_to(request.url_for("project_dictionary", slug=slug), "Access category deleted.", "success")
 
     @app.post("/projects/{slug}/access-categories/{category_id}/links", name="access_link_create")
     async def create_access_link(
@@ -783,7 +793,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             note=change_note.strip() or f"Added access link '{label.strip()}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
         )
-        return redirect_to(request.url_for("project_people_access", slug=slug), "Access link added.", "success")
+        return redirect_to(request.url_for("project_dictionary", slug=slug), "Access link added.", "success")
 
     @app.post("/projects/{slug}/access-categories/{category_id}/links/{link_id}", name="access_link_update")
     async def update_access_link(
@@ -810,7 +820,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             note=change_note.strip() or f"Updated access link '{link.label}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
         )
-        return redirect_to(request.url_for("project_people_access", slug=slug), "Access link updated.", "success")
+        return redirect_to(request.url_for("project_dictionary", slug=slug), "Access link updated.", "success")
 
     @app.post("/projects/{slug}/access-categories/{category_id}/links/{link_id}/delete", name="access_link_delete")
     async def delete_access_link(
@@ -829,7 +839,97 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             note=change_note.strip() or "Deleted access link",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
         )
-        return redirect_to(request.url_for("project_people_access", slug=slug), "Access link deleted.", "success")
+        return redirect_to(request.url_for("project_dictionary", slug=slug), "Access link deleted.", "success")
+
+    @app.post("/projects/{slug}/dictionary", name="dictionary_create")
+    async def create_dictionary_entry(
+        request: Request,
+        slug: str,
+        key: str = Form(...),
+        label: str = Form(""),
+        value: str = Form(""),
+        notes: str = Form(""),
+        change_note: str = Form(""),
+    ) -> RedirectResponse:
+        loaded = safe_load_project(storage, slug)
+        clean_key = key.strip()
+        if not _is_valid_dictionary_key(clean_key):
+            return redirect_to(
+                request.url_for("project_dictionary", slug=slug),
+                "Dictionary keys must start with a letter or underscore and use only letters, numbers, and underscores.",
+                "error",
+            )
+        if any(entry.key == clean_key for entry in loaded.project.dictionary):
+            return redirect_to(
+                request.url_for("project_dictionary", slug=slug),
+                f"A dictionary entry with key '{clean_key}' already exists.",
+                "error",
+            )
+        loaded.project.dictionary.append(
+            DictionaryEntry(key=clean_key, label=label.strip(), value=value.strip(), notes=notes.strip())
+        )
+        storage.save_project(
+            loaded.project,
+            loaded.sections,
+            note=change_note.strip() or f"Added dictionary entry '{clean_key}'",
+            preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+        )
+        return redirect_to(request.url_for("project_dictionary", slug=slug), "Dictionary entry added.", "success")
+
+    @app.post("/projects/{slug}/dictionary/{entry_id}", name="dictionary_update")
+    async def update_dictionary_entry(
+        request: Request,
+        slug: str,
+        entry_id: str,
+        key: str = Form(...),
+        label: str = Form(""),
+        value: str = Form(""),
+        notes: str = Form(""),
+        change_note: str = Form(""),
+    ) -> RedirectResponse:
+        loaded = safe_load_project(storage, slug)
+        entry = find_item(loaded.project.dictionary, entry_id)
+        clean_key = key.strip()
+        if not _is_valid_dictionary_key(clean_key):
+            return redirect_to(
+                request.url_for("project_dictionary", slug=slug),
+                "Dictionary keys must start with a letter or underscore and use only letters, numbers, and underscores.",
+                "error",
+            )
+        if clean_key != entry.key and any(other.key == clean_key for other in loaded.project.dictionary if other.id != entry_id):
+            return redirect_to(
+                request.url_for("project_dictionary", slug=slug),
+                f"A dictionary entry with key '{clean_key}' already exists.",
+                "error",
+            )
+        entry.key = clean_key
+        entry.label = label.strip()
+        entry.value = value.strip()
+        entry.notes = notes.strip()
+        storage.save_project(
+            loaded.project,
+            loaded.sections,
+            note=change_note.strip() or f"Updated dictionary entry '{clean_key}'",
+            preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+        )
+        return redirect_to(request.url_for("project_dictionary", slug=slug), "Dictionary entry updated.", "success")
+
+    @app.post("/projects/{slug}/dictionary/{entry_id}/delete", name="dictionary_delete")
+    async def delete_dictionary_entry(
+        request: Request,
+        slug: str,
+        entry_id: str,
+        change_note: str = Form(""),
+    ) -> RedirectResponse:
+        loaded = safe_load_project(storage, slug)
+        loaded.project.dictionary = [item for item in loaded.project.dictionary if item.id != entry_id]
+        storage.save_project(
+            loaded.project,
+            loaded.sections,
+            note=change_note.strip() or "Deleted dictionary entry",
+            preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+        )
+        return redirect_to(request.url_for("project_dictionary", slug=slug), "Dictionary entry deleted.", "success")
 
     @app.post("/projects/{slug}/sections/{section}", name="section_save")
     async def save_section(
@@ -1009,6 +1109,13 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
 
 def render_markdown(value: str) -> str:
     return markdown(value or "", extensions=["fenced_code", "tables", "sane_lists"])
+
+
+_DICT_KEY_RE = __import__("re").compile(r"^[A-Za-z_][\w]*$")
+
+
+def _is_valid_dictionary_key(key: str) -> bool:
+    return bool(key) and _DICT_KEY_RE.match(key) is not None
 
 
 def progress_pct(project: Project) -> float:
@@ -1355,7 +1462,9 @@ def tab_template(active_tab: str) -> str:
         "board": "partials/project_board.html",
         "timeline": "partials/project_timeline.html",
         "view_mode": "partials/project_view_mode.html",
-        "people_access": "partials/project_people_access.html",
+        "people": "partials/project_people.html",
+        "dictionary": "partials/project_dictionary.html",
+        "people_access": "partials/project_people.html",  # legacy alias
         "sections": "partials/project_section.html",
         "history": "partials/project_history.html",
     }

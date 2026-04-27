@@ -1,0 +1,61 @@
+<section class="card">
+  <div class="section-heading">
+    <h2>People directory</h2>
+    <p class="muted">Project-scoped contacts that tasks, milestones, and dictionary entries can reference.</p>
+  </div>
+
+  {% if project.people %}
+    <div class="table-stack">
+      {% for person in project.people %}
+        <form class="grid-row grid-row-person" method="post" action="{{ request.url_for('person_update', slug=project.slug, person_id=person.id) }}">
+          <input type="text" name="name" value="{{ person.name }}" required>
+          <input type="email" name="email" value="{{ person.email }}" required>
+          <input type="text" name="role" value="{{ person.role }}" required>
+          <span class="pill">{{ assignment_counts[person.id] }} active assignments</span>
+          <input type="text" name="change_note" placeholder="Addendum note">
+          <button class="button" type="submit">Save</button>
+        </form>
+        <form class="grid-row grid-row-delete" method="post" action="{{ request.url_for('person_delete', slug=project.slug, person_id=person.id) }}">
+          <select name="replacement_person_id">
+            <option value="">No replacement</option>
+            {% for candidate in project.people %}
+              {% if candidate.id != person.id %}
+                <option value="{{ candidate.id }}">{{ candidate.name }}</option>
+              {% endif %}
+            {% endfor %}
+          </select>
+          <label class="checkbox-row">
+            <input type="checkbox" name="clear_assignments">
+            Clear assignments
+          </label>
+          <input type="text" name="change_note" placeholder="Why remove this person?">
+          <button class="button button-danger" type="submit">Delete</button>
+        </form>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="muted">No people yet.</p>
+  {% endif %}
+
+  <form class="form-grid section-form-top" method="post" action="{{ request.url_for('person_create', slug=project.slug) }}">
+    <label>
+      Name
+      <input type="text" name="name" required>
+    </label>
+    <label>
+      Email
+      <input type="email" name="email" required>
+    </label>
+    <label>
+      Role
+      <input type="text" name="role" required>
+    </label>
+    <label>
+      Addendum note
+      <input type="text" name="change_note">
+    </label>
+    <div>
+      <button class="button button-primary" type="submit">Add person</button>
+    </div>
+  </form>
+</section>
