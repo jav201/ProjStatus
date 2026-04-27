@@ -36,7 +36,7 @@
   <form class="form-grid section-form-top" method="post" action="{{ request.url_for('dictionary_create', slug=project.slug) }}">
     <label>
       Key
-      <input type="text" name="key" placeholder="part_number" pattern="[A-Za-z_][\w]*" required>
+      <input type="text" name="key" placeholder="part_number" pattern="[A-Za-z_][\w]*" value="{{ prefill_key }}" {% if prefill_key %}autofocus{% endif %} required>
     </label>
     <label>
       Label

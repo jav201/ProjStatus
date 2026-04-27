@@ -380,6 +380,10 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
     async def project_dictionary(request: Request, slug: str) -> HTMLResponse:
         return await render_project_page(request, slug, "dictionary")
 
+    @app.get("/projects/{slug}/documents", response_class=HTMLResponse, name="project_documents")
+    async def project_documents(request: Request, slug: str) -> HTMLResponse:
+        return await render_project_page(request, slug, "documents")
+
     @app.get("/projects/{slug}/people-access", name="project_people_access")
     async def project_people_access_legacy(request: Request, slug: str) -> RedirectResponse:
         # back-compat redirect for any saved bookmarks / addendum links
@@ -1101,7 +1105,10 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             "export_mode": False,
             "present_mode": active_tab == "view_mode",
             "progress_pct": progress_pct(loaded.project),
+            "prefill_key": request.query_params.get("prefill_key", ""),
         }
+        if active_tab == "documents":
+            context["document_views"] = build_project_document_views(storage, loaded.project)
         return render_template(request, "project.html", context)
 
     return app
@@ -1379,6 +1386,44 @@ def parse_document_template_fields(fields_text: str) -> list[DocumentTemplateFie
     return fields
 
 
+def build_project_document_views(storage: StorageService, project: Project) -> list[dict[str, Any]]:
+    """Per-template, per-project tag inspection — mirrors `build_render_context` priority.
+
+    Resolution order matches storage.build_render_context: project.dictionary > template.fields[].value > built-in.
+    """
+    views: list[dict[str, Any]] = []
+    dict_entries = {entry.key: entry for entry in project.dictionary if entry.key and entry.value.strip()}
+    for template in storage.list_document_templates():
+        docx_path = storage.document_template_docx_path(template)
+        tags_found = inspect_docx_tags(docx_path) if docx_path else []
+        field_keys = {field.key: field for field in template.fields}
+        rows: list[dict[str, Any]] = []
+        counts = {"declared": 0, "builtin": 0, "template_default": 0, "missing": 0}
+        for tag in tags_found:
+            if tag in dict_entries:
+                rows.append({"tag": tag, "status": "declared", "source": dict_entries[tag].value})
+                counts["declared"] += 1
+            elif tag in BUILTIN_TAG_KEYS:
+                rows.append({"tag": tag, "status": "builtin", "source": ""})
+                counts["builtin"] += 1
+            elif tag in field_keys and field_keys[tag].value.strip():
+                rows.append({"tag": tag, "status": "template_default", "source": field_keys[tag].value})
+                counts["template_default"] += 1
+            else:
+                rows.append({"tag": tag, "status": "missing", "source": ""})
+                counts["missing"] += 1
+        counts["total_non_builtin"] = counts["declared"] + counts["template_default"] + counts["missing"]
+        views.append(
+            {
+                "template": template,
+                "tag_rows": rows,
+                "counts": counts,
+                "has_docx": bool(docx_path),
+            }
+        )
+    return views
+
+
 def build_canonical_field_index(document_templates: list[Any]) -> list[dict[str, Any]]:
     index: dict[str, dict[str, Any]] = {}
     for template in document_templates:
@@ -1464,6 +1509,7 @@ def tab_template(active_tab: str) -> str:
         "view_mode": "partials/project_view_mode.html",
         "people": "partials/project_people.html",
         "dictionary": "partials/project_dictionary.html",
+        "documents": "partials/project_documents.html",
         "people_access": "partials/project_people.html",  # legacy alias
         "sections": "partials/project_section.html",
         "history": "partials/project_history.html",
