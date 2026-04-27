@@ -841,7 +841,8 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
     ) -> RedirectResponse:
         section_name = validate_section(section)
         loaded = safe_load_project(storage, slug)
-        loaded.sections[section_name] = body
+        # normalise CRLF → LF before storing so we don't reintroduce growing whitespace
+        loaded.sections[section_name] = body.replace("\r\n", "\n").replace("\r", "\n")
         storage.save_project(
             loaded.project,
             loaded.sections,
@@ -857,6 +858,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         timeline_text: str = Form(""),
         change_note: str = Form(""),
     ) -> RedirectResponse:
+        timeline_text = timeline_text.replace("\r\n", "\n").replace("\r", "\n")
         loaded = safe_load_project(storage, slug)
         imported_project, imported, errors, supported = import_timeline(loaded.project.model_copy(deep=True), timeline_text)
         if supported and not errors:
