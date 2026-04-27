@@ -9,6 +9,8 @@ class AppConfig:
     root_dir: Path
     projects_dir: Path
     exports_dir: Path
+    project_templates_dir: Path
+    document_templates_dir: Path
     static_dir: Path
     templates_dir: Path
     default_board_columns: tuple[str, ...] = ("Backlog", "In Progress", "Blocked", "Done")
@@ -26,6 +28,8 @@ class AppConfig:
             root_dir=root_dir,
             projects_dir=root_dir / "projects",
             exports_dir=root_dir / "exports",
+            project_templates_dir=root_dir / "project_templates",
+            document_templates_dir=root_dir / "document_templates",
             static_dir=root_dir / "app" / "static",
             templates_dir=root_dir / "app" / "templates",
         )

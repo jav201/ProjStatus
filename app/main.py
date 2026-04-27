@@ -15,6 +15,8 @@ from app.config import AppConfig
 from app.models import (
     AccessCategory,
     AccessLink,
+    DocumentFieldType,
+    DocumentTemplateField,
     ExportFormat,
     ExportRequest,
     HealthStatus,
@@ -28,7 +30,7 @@ from app.models import (
 from app.services.exports import ExportService
 from app.services.mermaid import import_timeline, render_timeline
 from app.services.storage import SECTION_NAMES, StorageService
-from app.utils import format_date, parse_date
+from app.utils import format_date, parse_date, slugify
 
 
 def create_app(root_dir: Path | None = None) -> FastAPI:
@@ -38,6 +40,8 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         root_dir=data_root,
         projects_dir=data_root / "projects",
         exports_dir=data_root / "exports",
+        project_templates_dir=data_root / "project_templates",
+        document_templates_dir=data_root / "document_templates",
         static_dir=code_root / "app" / "static",
         templates_dir=code_root / "app" / "templates",
     )
@@ -61,6 +65,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         search: str = "",
         health: str = "",
         sort: str = "recent_update",
+        view: str = "cards",
         show_archived: str = "",
     ) -> HTMLResponse:
         include_archived = is_truthy(show_archived)
@@ -68,11 +73,13 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         recent_addendums = storage.list_recent_addendums(limit=8, include_archived=include_archived)
         upcoming_milestones: list[tuple[str, Any]] = []
         blocked_tasks: list[tuple[str, Task]] = []
+        loaded_projects: list[Project] = []
         today = date.today()
         due_soon = 0
 
         for project_entry in projects:
             loaded = storage.load_project(project_entry.slug)
+            loaded_projects.append(loaded.project)
             for milestone in sorted(
                 [item for item in loaded.project.milestones if item.target_date],
                 key=lambda item: item.target_date or date.max,
@@ -99,13 +106,15 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             "search": search,
             "health": health,
             "sort": sort,
+            "view": view if view in {"cards", "gantt", "table"} else "cards",
             "show_archived": include_archived,
+            "portfolio_gantt": build_portfolio_gantt(loaded_projects, today),
         }
         return render_template(request, "dashboard.html", context)
 
     @app.get("/projects/new", response_class=HTMLResponse, name="project_new")
     async def new_project(request: Request) -> HTMLResponse:
-        return render_template(request, "new_project.html", {})
+        return render_template(request, "new_project.html", {"project_templates": storage.list_project_templates()})
 
     @app.post("/projects/new", name="project_create")
     async def create_project(
@@ -114,14 +123,60 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         description: str = Form(""),
         start_date_value: str = Form("", alias="start_date"),
         end_date_value: str = Form("", alias="end_date"),
+        template_slug: str = Form(""),
     ) -> RedirectResponse:
-        project = storage.create_project(
-            name=name.strip(),
-            description=description.strip(),
-            start_date=parse_date(start_date_value),
-            end_date=parse_date(end_date_value),
-        )
+        if template_slug:
+            project = storage.create_project_from_template(
+                template_slug=template_slug,
+                name=name.strip(),
+                description=description.strip(),
+                start_date=parse_date(start_date_value),
+                end_date=parse_date(end_date_value),
+            )
+        else:
+            project = storage.create_project(
+                name=name.strip(),
+                description=description.strip(),
+                start_date=parse_date(start_date_value),
+                end_date=parse_date(end_date_value),
+            )
         return redirect_to(request.url_for("project_overview", slug=project.slug), "Project created.", "success")
+
+    @app.get("/templates", response_class=HTMLResponse, name="templates")
+    async def templates_page(request: Request) -> HTMLResponse:
+        document_templates = storage.list_document_templates()
+        canonical_fields = build_canonical_field_index(document_templates)
+        return render_template(
+            request,
+            "templates.html",
+            {
+                "projects": storage.list_dashboard_projects(sort_by="name", include_archived=True),
+                "project_templates": storage.list_project_templates(),
+                "document_templates": document_templates,
+                "canonical_fields": canonical_fields,
+            },
+        )
+
+    @app.post("/templates/projects", name="project_template_create")
+    async def create_project_template(
+        request: Request,
+        project_slug: str = Form(...),
+        name: str = Form(...),
+        description: str = Form(""),
+    ) -> RedirectResponse:
+        storage.create_project_template_from_project(project_slug, name.strip(), description.strip())
+        return redirect_to(request.url_for("templates"), "Project template created.", "success")
+
+    @app.post("/templates/documents", name="document_template_create")
+    async def create_document_template(
+        request: Request,
+        name: str = Form(...),
+        description: str = Form(""),
+        fields_text: str = Form(""),
+    ) -> RedirectResponse:
+        fields = parse_document_template_fields(fields_text)
+        storage.create_document_template(name.strip(), description.strip(), fields)
+        return redirect_to(request.url_for("templates"), "Document template created.", "success")
 
     @app.get("/projects/{slug}", response_class=HTMLResponse, name="project_overview")
     async def project_overview(request: Request, slug: str) -> HTMLResponse:
@@ -781,6 +836,119 @@ def render_template(request: Request, template_name: str, context: dict[str, Any
     }
     merged.update(context)
     return templates.TemplateResponse(request, template_name, merged)
+
+
+def build_portfolio_gantt(projects: list[Project], today: date) -> dict[str, Any]:
+    dated_projects = [project for project in projects if project.start_date or project.end_date]
+    if not dated_projects:
+        return {"rows": [], "start": None, "end": None, "total_days": 0, "today_percent": None}
+
+    starts = [project.start_date or project.end_date for project in dated_projects]
+    ends = [project.end_date or project.start_date for project in dated_projects]
+    chart_start = min(item for item in starts if item is not None)
+    chart_end = max(item for item in ends if item is not None)
+    total_days = max((chart_end - chart_start).days, 1)
+
+    rows = []
+    for project in dated_projects:
+        start = project.start_date or project.end_date or chart_start
+        end = project.end_date or project.start_date or start
+        if end < start:
+            start, end = end, start
+        offset = ((start - chart_start).days / total_days) * 100
+        width = max(((end - start).days / total_days) * 100, 2)
+        offset = min(max(offset, 0), 100)
+        width = min(width, 100 - offset)
+        milestones = []
+        for milestone in project.milestones:
+            if milestone.target_date is None:
+                continue
+            milestones.append(
+                {
+                    "title": milestone.title,
+                    "date": milestone.target_date,
+                    "status": milestone.status.value,
+                    "offset": min(max(((milestone.target_date - chart_start).days / total_days) * 100, 0), 100),
+                }
+            )
+        rows.append(
+            {
+                "slug": project.slug,
+                "name": project.name,
+                "health": project.health.value,
+                "status": project.status.value,
+                "start": start,
+                "end": end,
+                "offset": offset,
+                "width": width,
+                "milestones": milestones,
+            }
+        )
+
+    today_percent = None
+    if chart_start <= today <= chart_end:
+        today_percent = ((today - chart_start).days / total_days) * 100
+
+    return {"rows": rows, "start": chart_start, "end": chart_end, "total_days": total_days, "today_percent": today_percent}
+
+
+def parse_document_template_fields(fields_text: str) -> list[DocumentTemplateField]:
+    fields: list[DocumentTemplateField] = []
+    for line in fields_text.splitlines():
+        clean_line = line.strip()
+        if not clean_line:
+            continue
+        parts = [part.strip() for part in clean_line.split("|")]
+        key = parts[0] if parts else ""
+        label = parts[1] if len(parts) > 1 and parts[1] else key.replace("_", " ").title()
+        field_type = parts[2] if len(parts) > 2 and parts[2] else DocumentFieldType.STRING.value
+        aliases = parts[3] if len(parts) > 3 else ""
+        required = True
+        if len(parts) > 4:
+            required = parts[4].lower() not in {"optional", "false", "no", "0"}
+        value = parts[5] if len(parts) > 5 else ""
+        fields.append(
+            DocumentTemplateField(
+                key=slugify(key).replace("-", "_"),
+                label=label,
+                field_type=DocumentFieldType(field_type),
+                aliases=aliases,
+                required=required,
+                value=value,
+            )
+        )
+    return fields
+
+
+def build_canonical_field_index(document_templates: list[Any]) -> list[dict[str, Any]]:
+    index: dict[str, dict[str, Any]] = {}
+    for template in document_templates:
+        for field in template.fields:
+            entry = index.setdefault(
+                field.key,
+                {
+                    "key": field.key,
+                    "labels": set(),
+                    "aliases": set(),
+                    "documents": [],
+                    "missing_count": 0,
+                },
+            )
+            entry["labels"].add(field.label)
+            entry["aliases"].update(field.aliases)
+            entry["documents"].append(template.name)
+            if field.required and not field.value.strip():
+                entry["missing_count"] += 1
+    return [
+        {
+            "key": key,
+            "labels": sorted(value["labels"]),
+            "aliases": sorted(value["aliases"]),
+            "documents": sorted(value["documents"]),
+            "missing_count": value["missing_count"],
+        }
+        for key, value in sorted(index.items())
+    ]
 
 
 def redirect_to(url: str | Any, message: str, level: str) -> RedirectResponse:

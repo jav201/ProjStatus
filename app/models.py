@@ -140,6 +140,64 @@ class ProjectSnapshot(BaseModel):
     timeline_text: str
 
 
+class ProjectTemplate(BaseModel):
+    slug: str
+    name: str
+    description: str = ""
+    created_at: datetime = Field(default_factory=datetime.now)
+    snapshot: ProjectSnapshot
+
+
+class DocumentFieldType(StrEnum):
+    STRING = "string"
+    EXCEL_TABLE = "excel_table"
+    EXCEL_CELL = "excel_cell"
+
+
+class DocumentTemplateField(BaseModel):
+    key: str
+    label: str
+    field_type: DocumentFieldType = DocumentFieldType.STRING
+    required: bool = True
+    aliases: list[str] = Field(default_factory=list)
+    value: str = ""
+
+    @field_validator("aliases", mode="before")
+    @classmethod
+    def normalize_aliases(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return list(value)
+
+
+class DocumentTemplate(BaseModel):
+    slug: str
+    name: str
+    description: str = ""
+    created_at: datetime = Field(default_factory=datetime.now)
+    fields: list[DocumentTemplateField] = Field(default_factory=list)
+
+    @property
+    def required_count(self) -> int:
+        return sum(1 for field in self.fields if field.required)
+
+    @property
+    def completed_required_count(self) -> int:
+        return sum(1 for field in self.fields if field.required and field.value.strip())
+
+    @property
+    def completion_percent(self) -> int:
+        if self.required_count == 0:
+            return 100
+        return round((self.completed_required_count / self.required_count) * 100)
+
+    @property
+    def missing_fields(self) -> list[DocumentTemplateField]:
+        return [field for field in self.fields if field.required and not field.value.strip()]
+
+
 class Addendum(BaseModel):
     id: str
     created_at: datetime

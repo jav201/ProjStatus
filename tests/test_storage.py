@@ -5,7 +5,7 @@ from datetime import date
 from pathlib import Path
 
 from app.config import AppConfig
-from app.models import Milestone, Person, Task
+from app.models import DocumentTemplateField, Milestone, Person, Task
 from app.services.storage import StorageService
 
 
@@ -146,3 +146,34 @@ def test_archive_duplicate_delete_and_dashboard_search_sort(tmp_path: Path) -> N
 
     storage.delete_project(duplicate.slug)
     assert not duplicate_dir.exists()
+
+
+def test_project_and_document_templates(tmp_path: Path) -> None:
+    storage = make_storage(tmp_path)
+    source = storage.create_project("Source Project", description="Seed")
+    loaded = storage.load_project(source.slug)
+    loaded.project.milestones.append(Milestone(title="Gate Review", target_date=date(2026, 5, 1)))
+    loaded.sections["content"] = "Starter scope"
+    storage.save_project(loaded.project, loaded.sections, note="Seed template content")
+
+    template = storage.create_project_template_from_project(source.slug, "Gate Template", "Reusable gate flow")
+    assert template.slug == "gate-template"
+    assert (tmp_path / "project_templates" / "gate-template.json").exists()
+
+    created = storage.create_project_from_template("gate-template", "New Gate Project")
+    refreshed = storage.load_project(created.slug)
+    assert refreshed.project.name == "New Gate Project"
+    assert refreshed.project.milestones[0].title == "Gate Review"
+    assert refreshed.sections["content"] == "Starter scope"
+
+    document = storage.create_document_template(
+        "RFQ Packet",
+        "Supplier request",
+        [
+            DocumentTemplateField(key="part_number", label="Part Number", aliases="PN,Item Number", value=""),
+            DocumentTemplateField(key="bom_table", label="BOM Table", field_type="excel_table", value="Rows ready"),
+        ],
+    )
+    assert document.completion_percent == 50
+    assert document.missing_fields[0].key == "part_number"
+    assert storage.list_document_templates()[0].fields[0].aliases == ["PN", "Item Number"]

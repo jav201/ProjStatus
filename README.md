@@ -10,6 +10,8 @@ ProjStatus is a local-first project management app built with Python and FastAPI
 - Automatic addendums on every save with snapshot history and restore actions
 - Batch exports to standalone HTML, PNG, and PPTX summary decks
 
+For workflow instructions and document tag examples, see [USER_GUIDE.md](USER_GUIDE.md).
+
 ## Run
 
 ```powershell

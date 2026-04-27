@@ -126,6 +126,21 @@
         </div>
       </form>
 
+      <form class="form-grid" method="post" action="{{ request.url_for('project_template_create') }}">
+        <input type="hidden" name="project_slug" value="{{ project.slug }}">
+        <label class="full-span">
+          Save as template
+          <input type="text" name="name" value="{{ project.name }} Template" required>
+        </label>
+        <label class="full-span">
+          Template notes
+          <input type="text" name="description" placeholder="When should this template be used?">
+        </label>
+        <div class="full-span">
+          <button class="button button-subtle" type="submit">Create template</button>
+        </div>
+      </form>
+
       <form class="form-grid danger-zone" method="post" action="{{ request.url_for('project_delete', slug=project.slug) }}">
         <label class="full-span">
           Confirm permanent delete

@@ -12,10 +12,13 @@ from app.models import (
     AccessCategory,
     Addendum,
     DashboardProject,
+    DocumentTemplate,
+    DocumentTemplateField,
     HealthStatus,
     Project,
     ProjectLoadResult,
     ProjectSnapshot,
+    ProjectTemplate,
     SectionName,
     SyncHealth,
     SyncState,
@@ -34,6 +37,8 @@ class StorageService:
         self.config = config
         self.config.projects_dir.mkdir(parents=True, exist_ok=True)
         self.config.exports_dir.mkdir(parents=True, exist_ok=True)
+        self.config.project_templates_dir.mkdir(parents=True, exist_ok=True)
+        self.config.document_templates_dir.mkdir(parents=True, exist_ok=True)
 
     def list_dashboard_projects(
         self,
@@ -85,6 +90,87 @@ class StorageService:
         sections = {section: "" for section in SECTION_NAMES}
         self.save_project(project, sections, note="Project created", actor="web")
         return project
+
+    def create_project_from_template(
+        self,
+        template_slug: str,
+        name: str,
+        description: str = "",
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> Project:
+        template = self.load_project_template(template_slug)
+        project = template.snapshot.project.model_copy(deep=True)
+        project.id = make_id("project")
+        project.slug = self._unique_slug(slugify(name))
+        project.name = name
+        project.description = description or project.description
+        project.start_date = start_date or project.start_date
+        project.end_date = end_date or project.end_date
+        project.archived = False
+        project.archived_at = None
+        project.sync_state = SyncState()
+        self.save_project(
+            project,
+            template.snapshot.sections.copy(),
+            note=f"Project created from template '{template.name}'",
+            actor="template",
+            timeline_text=render_timeline(project),
+        )
+        return project
+
+    def list_project_templates(self) -> list[ProjectTemplate]:
+        templates = []
+        for path in sorted(self.config.project_templates_dir.glob("*.json")):
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            templates.append(ProjectTemplate.model_validate(payload))
+        templates.sort(key=lambda item: item.name.lower())
+        return templates
+
+    def load_project_template(self, slug: str) -> ProjectTemplate:
+        path = self.config.project_templates_dir / f"{slug}.json"
+        if not path.exists():
+            raise FileNotFoundError(slug)
+        return ProjectTemplate.model_validate(json.loads(path.read_text(encoding="utf-8")))
+
+    def create_project_template_from_project(self, project_slug: str, name: str, description: str = "") -> ProjectTemplate:
+        loaded = self.load_project(project_slug)
+        slug = self._unique_template_slug(slugify(name), self.config.project_templates_dir)
+        template = ProjectTemplate(
+            slug=slug,
+            name=name,
+            description=description,
+            snapshot=ProjectSnapshot(
+                project=loaded.project.model_copy(deep=True),
+                sections=loaded.sections.copy(),
+                timeline_text=loaded.timeline_text,
+            ),
+        )
+        (self.config.project_templates_dir / f"{slug}.json").write_text(
+            dumps_pretty(template.model_dump(mode="json")),
+            encoding="utf-8",
+        )
+        return template
+
+    def list_document_templates(self) -> list[DocumentTemplate]:
+        templates = []
+        for path in sorted(self.config.document_templates_dir.glob("*.json")):
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            templates.append(DocumentTemplate.model_validate(payload))
+        templates.sort(key=lambda item: item.name.lower())
+        return templates
+
+    def create_document_template(self, name: str, description: str, fields: list[DocumentTemplateField]) -> DocumentTemplate:
+        slug = self._unique_template_slug(slugify(name), self.config.document_templates_dir)
+        template = DocumentTemplate(slug=slug, name=name, description=description, fields=fields)
+        self.save_document_template(template)
+        return template
+
+    def save_document_template(self, template: DocumentTemplate) -> None:
+        (self.config.document_templates_dir / f"{template.slug}.json").write_text(
+            dumps_pretty(template.model_dump(mode="json")),
+            encoding="utf-8",
+        )
 
     def archive_project(self, slug: str, note: str = "") -> Addendum:
         loaded = self.load_project(slug)
@@ -291,6 +377,14 @@ class StorageService:
         candidate = slug
         index = 2
         while self._project_dir(candidate).exists():
+            candidate = f"{slug}-{index}"
+            index += 1
+        return candidate
+
+    def _unique_template_slug(self, slug: str, directory: Path) -> str:
+        candidate = slug
+        index = 2
+        while (directory / f"{candidate}.json").exists():
             candidate = f"{slug}-{index}"
             index += 1
         return candidate
