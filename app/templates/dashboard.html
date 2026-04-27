@@ -110,7 +110,6 @@
       <a class="button button-primary" href="{{ request.url_for('project_new') }}">Create project</a>
     </article>
   {% elif view == "gantt" %}
-    {# unchanged Gantt layout — see existing markup #}
     <section class="card portfolio-gantt-card">
       <div class="section-heading">
         <div>
@@ -120,36 +119,54 @@
         {% if portfolio_gantt.start %}<span class="pill">{{ portfolio_gantt.start }} → {{ portfolio_gantt.end }}</span>{% endif %}
       </div>
       {% if portfolio_gantt.rows %}
-        <div class="portfolio-gantt portfolio-gantt-wide">
-          {% if portfolio_gantt.axis_ticks %}
-            <div class="gantt-row gantt-axis-row">
-              <div class="gantt-row-label gantt-row-label-axis"></div>
-              <div class="gantt-axis">
-                {% for tick in portfolio_gantt.axis_ticks %}
-                  <span class="gantt-axis-tick" style="left: {{ tick.offset }}%;">{{ tick.label }}</span>
-                {% endfor %}
-              </div>
+        <div class="portfolio-gantt-v2">
+          <header class="pg-header">
+            <span class="pg-label-col">Project</span>
+            <div class="pg-axis">
+              {% for tick in portfolio_gantt.axis_ticks %}
+                <span class="pg-axis-tick" style="left: {{ tick.offset }}%;">{{ tick.label }}</span>
+              {% endfor %}
             </div>
-          {% endif %}
-          {% for row in portfolio_gantt.rows %}
-            <div class="gantt-row">
-              <div class="gantt-row-label">
-                <a href="{{ request.url_for('project_overview', slug=row.slug) }}">{{ row.name }}</a>
-                <span>{{ row.start }} → {{ row.end }}</span>
-              </div>
-              <div class="gantt-track">
-                {% if portfolio_gantt.today_percent is not none %}
-                  <span class="gantt-today" style="left: {{ portfolio_gantt.today_percent }}%"></span>
-                {% endif %}
-                <a class="gantt-bar gantt-health-{{ row.health }}" href="{{ request.url_for('project_overview', slug=row.slug) }}" style="left: {{ row.offset }}%; width: {{ row.width }}%" title="{{ row.name }}: {{ row.start }} to {{ row.end }}">
-                  <span>{{ row.name }}</span>
+          </header>
+          <div class="pg-body" {% if portfolio_gantt.today_percent is not none %}style="--pg-today: {{ portfolio_gantt.today_percent }}%;"{% endif %}>
+            {% if portfolio_gantt.today_percent is not none %}
+              <span class="pg-today-line" aria-hidden="true"></span>
+            {% endif %}
+            {% for row in portfolio_gantt.rows %}
+              {% set pct = (row.progress_pct * 100) | round | int %}
+              <div class="pg-row">
+                <a class="pg-label" href="{{ request.url_for('project_overview', slug=row.slug) }}" title="{{ row.name }}">
+                  <span class="pg-dot health-{{ row.health }}"></span>
+                  <span class="pg-name">{{ row.name }}</span>
+                  {% if row.owners %}
+                    <span class="pg-owners">
+                      {% for owner in row.owners %}
+                        <span class="pg-owner-chip" title="{{ owner.name }}">{{ owner.initials }}</span>
+                      {% endfor %}
+                      {% if row.extra_owner_count %}<span class="pg-owner-chip pg-owner-more">+{{ row.extra_owner_count }}</span>{% endif %}
+                    </span>
+                  {% endif %}
                 </a>
-                {% for milestone in row.milestones %}
-                  <span class="gantt-milestone gantt-milestone-{{ milestone.status }}" style="left: {{ milestone.offset }}%" title="{{ milestone.title }} — {{ milestone.date }}"></span>
-                {% endfor %}
+                <div class="pg-track">
+                  <a class="pg-bar pg-health-{{ row.health }}" href="{{ request.url_for('project_overview', slug=row.slug) }}" style="left: {{ row.offset }}%; width: {{ row.width }}%;" title="{{ row.name }}: {{ row.start }} → {{ row.end }} · {{ pct }}%">
+                    <span class="pg-bar-fill" style="width: {{ pct }}%;"></span>
+                    <span class="pg-bar-pct">{{ pct }}%</span>
+                  </a>
+                  {% for milestone in row.milestones %}
+                    <span class="pg-milestone pg-milestone-{{ milestone.status }}" style="left: {{ milestone.offset }}%" title="{{ milestone.title }} — {{ milestone.date }}"></span>
+                  {% endfor %}
+                </div>
               </div>
-            </div>
-          {% endfor %}
+            {% endfor %}
+          </div>
+        </div>
+        <div class="pg-legend">
+          <span class="legend-item"><span class="swatch swatch-on-track"></span>On track</span>
+          <span class="legend-item"><span class="swatch swatch-at-risk"></span>At risk</span>
+          <span class="legend-item"><span class="swatch swatch-blocked"></span>Blocked</span>
+          <span class="legend-item"><span class="swatch swatch-complete"></span>Complete</span>
+          <span class="legend-item"><span class="swatch swatch-milestone"></span>Milestone</span>
+          <span class="legend-item"><span class="swatch swatch-today"></span>Today</span>
         </div>
       {% else %}
         <p class="muted">Add project start or end dates to build the portfolio Gantt chart.</p>

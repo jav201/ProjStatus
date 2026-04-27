@@ -818,6 +818,262 @@ body {
 .inbox-when { font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
 .day-heading { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; }
 
+/* =====================================================================
+   Portfolio Gantt v2 — richer pill bars with progress + diamonds
+   ===================================================================== */
+
+.portfolio-gantt-v2 {
+  --pg-label-w: 220px;
+  --pg-row-h: 38px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-strong);
+}
+
+.pg-header {
+  display: grid;
+  grid-template-columns: var(--pg-label-w) 1fr;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-muted);
+}
+.pg-label-col {
+  padding: 0 16px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 700;
+}
+.pg-axis {
+  position: relative;
+  height: 18px;
+  margin-right: 18px;
+}
+.pg-axis-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pg-body {
+  position: relative;
+  padding-bottom: 6px;
+}
+
+.pg-today-line {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  /* place inside the track region: left = label_w + track_w * pct/100, where track_w = 100% - label_w - 18px */
+  left: calc(var(--pg-label-w) + (100% - var(--pg-label-w) - 18px) * var(--pg-today) / 100%);
+  background: var(--accent);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--accent) 0 6px,
+    transparent 6px 10px
+  );
+  z-index: 5;
+  pointer-events: none;
+}
+
+.pg-row {
+  display: grid;
+  grid-template-columns: var(--pg-label-w) 1fr;
+  align-items: center;
+  height: var(--pg-row-h);
+  border-top: 1px solid var(--line);
+}
+.pg-row:first-child { border-top: 0; }
+.pg-row:hover .pg-bar { filter: brightness(1.05); }
+
+.pg-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 16px;
+  text-decoration: none;
+  color: var(--ink);
+  min-width: 0;
+}
+.pg-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.pg-dot.health-on-track { background: var(--success); }
+.pg-dot.health-at-risk { background: var(--warning); }
+.pg-dot.health-blocked { background: var(--danger); }
+.pg-dot.health-complete { background: var(--accent); }
+.pg-name {
+  flex: 1;
+  font-size: 0.86rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pg-owners {
+  display: inline-flex;
+  align-items: center;
+  gap: -2px;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+.pg-owner-chip {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.66rem;
+  font-weight: 700;
+  border: 2px solid var(--surface-strong);
+  margin-left: -6px;
+}
+.pg-owner-chip:first-child { margin-left: 0; }
+.pg-owner-more {
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 0.6rem;
+}
+
+.pg-track {
+  position: relative;
+  height: var(--pg-row-h);
+  margin-right: 18px;
+}
+
+.pg-bar {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 22px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  color: white;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  transition: filter 120ms ease;
+  z-index: 2;
+  min-width: 28px;
+}
+.pg-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: inherit;
+  pointer-events: none;
+}
+.pg-bar-pct {
+  position: relative;
+  z-index: 1;
+  padding: 0 8px;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.18);
+}
+
+.pg-bar.pg-health-on-track { background: #4cae79; }
+.pg-bar.pg-health-at-risk { background: #d99838; }
+.pg-bar.pg-health-blocked { background: #d05a64; }
+.pg-bar.pg-health-complete { background: #8a98a5; }
+
+html[data-theme="dark"] .pg-bar.pg-health-on-track { background: #36c3b4; }
+html[data-theme="dark"] .pg-bar.pg-health-at-risk { background: #e2a63d; }
+html[data-theme="dark"] .pg-bar.pg-health-blocked { background: #ff6b7a; }
+html[data-theme="dark"] .pg-bar.pg-health-complete { background: #6c7a89; }
+
+.pg-milestone {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  background: var(--ink);
+  transform: translate(-50%, -50%) rotate(45deg);
+  z-index: 4;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px var(--surface-strong);
+}
+.pg-milestone-complete { background: var(--success); }
+.pg-milestone-active { background: var(--accent); }
+.pg-milestone-blocked { background: var(--danger); }
+
+.pg-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 4px 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.pg-legend .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.pg-legend .swatch { width: 14px; height: 14px; border-radius: 4px; display: inline-block; }
+.pg-legend .swatch-on-track { background: #4cae79; }
+.pg-legend .swatch-at-risk { background: #d99838; }
+.pg-legend .swatch-blocked { background: #d05a64; }
+.pg-legend .swatch-complete { background: #8a98a5; }
+.pg-legend .swatch-milestone {
+  width: 12px;
+  height: 12px;
+  background: var(--ink);
+  transform: rotate(45deg);
+  border-radius: 0;
+}
+.pg-legend .swatch-today {
+  background: var(--accent);
+  width: 3px;
+  height: 14px;
+  border-radius: 0;
+}
+
+@media (max-width: 1100px) {
+  .portfolio-gantt-v2 { --pg-label-w: 180px; }
+}
+@media (max-width: 720px) {
+  .portfolio-gantt-v2 { --pg-label-w: 140px; }
+  .pg-name { font-size: 0.78rem; }
+  .pg-owners { display: none; }
+}
+
+/* =====================================================================
+   Segmented control fix — keep labels intact at narrow widths
+   ===================================================================== */
+
+.segmented {
+  flex-shrink: 0;
+  white-space: nowrap;
+  width: max-content;
+  overflow: hidden;
+}
+.segmented a, .segmented button {
+  white-space: nowrap;
+  flex-shrink: 0;
+  text-align: center;
+  min-width: 64px;
+  padding: 6px 16px;
+  width: auto;
+}
+.filters .segmented { width: max-content; min-width: 220px; }
+
 /* Risks table */
 .risk-table { width: 100%; border-collapse: collapse; }
 .risk-table th, .risk-table td {

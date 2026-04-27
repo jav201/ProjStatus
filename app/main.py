@@ -1154,6 +1154,13 @@ def build_portfolio_gantt(projects: list[Project], today: date) -> dict[str, Any
                     "offset": min(max(((milestone.target_date - chart_start).days / total_days) * 100, 0), 100),
                 }
             )
+        owner_initials = []
+        for person in project.people[:3]:
+            parts = person.name.split()
+            if not parts:
+                continue
+            initials = parts[0][:1] + (parts[1][:1] if len(parts) > 1 else "")
+            owner_initials.append({"initials": initials.upper(), "name": person.name})
         rows.append(
             {
                 "slug": project.slug,
@@ -1165,6 +1172,9 @@ def build_portfolio_gantt(projects: list[Project], today: date) -> dict[str, Any
                 "offset": offset,
                 "width": width,
                 "milestones": milestones,
+                "progress_pct": progress_pct(project),
+                "owners": owner_initials,
+                "extra_owner_count": max(len(project.people) - 3, 0),
             }
         )
 
