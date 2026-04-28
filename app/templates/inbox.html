@@ -9,8 +9,8 @@
       <h1>Inbox</h1>
     </div>
     <div class="segmented">
-      <a class="{% if filter != 'unread' %}is-active{% endif %}" href="{{ request.url_for('inbox') }}">All</a>
-      <a class="{% if filter == 'unread' %}is-active{% endif %}" href="{{ request.url_for('inbox') }}?filter=unread">Last 24h{% if unread_count %} · {{ unread_count }}{% endif %}</a>
+      <a class="{% if filter != 'last_24h' %}is-active{% endif %}" href="{{ request.url_for('inbox') }}">All</a>
+      <a class="{% if filter == 'last_24h' %}is-active{% endif %}" href="{{ request.url_for('inbox') }}?filter=last_24h">Last 24h{% if unread_count %} · {{ unread_count }}{% endif %}</a>
     </div>
   </section>
 
@@ -40,7 +40,7 @@
       {% else %}
         <article class="card empty-state">
           <h2>Nothing here yet</h2>
-          <p>{% if filter == 'unread' %}No activity in the last 24 hours.{% else %}Activity will appear after the first save.{% endif %}</p>
+          <p>{% if filter == 'last_24h' %}No activity in the last 24 hours.{% else %}Activity will appear after the first save.{% endif %}</p>
         </article>
       {% endif %}
     </div>

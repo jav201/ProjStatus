@@ -81,6 +81,7 @@
             {% if view.tags_found %}
               <div class="tag-table">
                 <h4>Tags in this document</h4>
+                <p class="muted">Status reflects template-level defaults. Each project's Dictionary supplies the per-project values — see a project's <strong>Documents</strong> tab to verify resolution.</p>
                 <table>
                   <thead><tr><th>Tag</th><th>Field</th><th>Source</th><th>Status</th></tr></thead>
                   <tbody>
@@ -99,7 +100,7 @@
                           {% if is_builtin %}<span class="chip-muted">Auto</span>
                           {% elif not matched %}<span class="chip-warning">No field</span>
                           {% elif matched.value %}<span class="chip-success">Filled</span>
-                          {% elif matched.required %}<span class="chip-danger">Missing</span>
+                          {% elif matched.required %}<span class="chip-warning">No default</span>
                           {% else %}<span class="chip-muted">Optional</span>{% endif %}
                         </td>
                       </tr>
