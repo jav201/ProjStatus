@@ -19,12 +19,12 @@ For tag syntax and screen-by-screen workflow, see [USER_GUIDE.md](USER_GUIDE.md)
 ```powershell
 python -m venv .venv
 .venv\Scripts\activate
-python -m pip install -e ".[dev,docx,exports]"
+python -m pip install -e ".[dev,exports]"
 python -m playwright install chromium
 python -m uvicorn app.main:app --reload
 ```
 
-`docx` enables Word document filling, `exports` enables PNG export. Both are optional.
+`exports` enables PNG export and is optional. Word document filling is built in.
 
 Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 

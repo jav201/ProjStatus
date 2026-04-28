@@ -5,8 +5,10 @@ import re
 import shutil
 import zipfile
 from datetime import date, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 
+from docxtpl import DocxTemplate
 from pydantic import ValidationError
 
 from app.config import AppConfig
@@ -296,15 +298,6 @@ class StorageService:
         return template
 
     def render_document_template(self, slug: str, project_slug: str) -> tuple[bytes, str]:
-        from io import BytesIO
-
-        try:
-            from docxtpl import DocxTemplate
-        except ImportError as exc:  # pragma: no cover - optional dep
-            raise RuntimeError(
-                "Install the 'docx' optional dependency: python -m pip install -e \".[docx]\""
-            ) from exc
-
         template = self.load_document_template(slug)
         docx_path = self.document_template_docx_path(template)
         if docx_path is None:
