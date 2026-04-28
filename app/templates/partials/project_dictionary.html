@@ -16,9 +16,9 @@
     <div class="table-stack dict-table">
       {% for entry in project.dictionary %}
         <form class="grid-row grid-row-dict" method="post" action="{{ request.url_for('dictionary_update', slug=project.slug, entry_id=entry.id) }}">
-          <input type="text" name="key" value="{{ entry.key }}" placeholder="part_number" pattern="[A-Za-z_][\w]*" required>
-          <input type="text" name="label" value="{{ entry.label }}" placeholder="Part Number">
-          <input type="text" name="value" value="{{ entry.value }}" placeholder="ABC-12345">
+          <input type="text" name="key" value="{{ entry.key }}" placeholder="e.g. part_number" pattern="[A-Za-z_][\w]*" required>
+          <input type="text" name="label" value="{{ entry.label }}" placeholder="e.g. Part Number">
+          <input type="text" name="value" value="{{ entry.value }}" placeholder="e.g. ABC-12345">
           <input type="text" name="notes" value="{{ entry.notes }}" placeholder="Notes">
           <input type="text" name="change_note" placeholder="Addendum note">
           <button class="button" type="submit">Save</button>
@@ -36,15 +36,15 @@
   <form class="form-grid section-form-top" method="post" action="{{ request.url_for('dictionary_create', slug=project.slug) }}">
     <label>
       Key
-      <input type="text" name="key" placeholder="part_number" pattern="[A-Za-z_][\w]*" value="{{ prefill_key }}" {% if prefill_key %}autofocus{% endif %} required>
+      <input type="text" name="key" placeholder="e.g. part_number" pattern="[A-Za-z_][\w]*" value="{{ prefill_key }}" {% if prefill_key %}autofocus{% endif %} required>
     </label>
     <label>
       Label
-      <input type="text" name="label" placeholder="Part Number">
+      <input type="text" name="label" placeholder="e.g. Part Number">
     </label>
     <label>
       Value
-      <input type="text" name="value" placeholder="ABC-12345">
+      <input type="text" name="value" placeholder="e.g. ABC-12345">
     </label>
     <label>
       Notes
