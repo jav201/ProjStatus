@@ -364,6 +364,11 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
     async def project_board(request: Request, slug: str) -> HTMLResponse:
         return await render_project_page(request, slug, "board")
 
+    @app.get("/projects/{slug}/plan", name="project_plan")
+    async def project_plan(request: Request, slug: str) -> RedirectResponse:
+        # back-compat alias: the "Plan" tab links to /board now
+        return RedirectResponse(request.url_for("project_board", slug=slug), status_code=308)
+
     @app.get("/projects/{slug}/timeline", response_class=HTMLResponse, name="project_timeline")
     async def project_timeline(request: Request, slug: str) -> HTMLResponse:
         return await render_project_page(request, slug, "timeline")
