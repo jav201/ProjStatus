@@ -180,10 +180,21 @@
   <form class="form-grid" method="post" action="{{ request.url_for('project_delete', slug=project.slug) }}">
     <label class="full-span">
       Type the project name to confirm
-      <input type="text" name="confirm_name" placeholder="{{ project.name }}">
+      <input
+        type="text"
+        name="confirm_name"
+        placeholder="{{ project.name }}"
+        autocomplete="off"
+        oninput='document.getElementById("delete-project-{{ project.slug }}").disabled = (this.value !== {{ project.name|tojson }});'>
     </label>
     <div class="full-span">
-      <button class="button button-danger" type="submit">Delete project permanently</button>
+      <button
+        id="delete-project-{{ project.slug }}"
+        class="button button-danger"
+        type="submit"
+        disabled>
+        Delete project permanently
+      </button>
     </div>
   </form>
 </section>
