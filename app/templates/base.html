@@ -86,9 +86,6 @@
             {% if not loop.last %}<span class="crumb-sep">/</span>{% endif %}
           {% endfor %}
         </nav>
-        <form class="global-search" method="get" action="{{ request.url_for('dashboard') }}" role="search">
-          <input type="search" name="search" placeholder="Search projects, owners, roles…" value="{{ request.query_params.get('search', '') }}" autocomplete="off">
-        </form>
         <button class="button button-subtle theme-toggle" type="button" data-theme-toggle aria-label="Toggle dark mode">
           <span data-theme-label>Dark mode</span>
         </button>
