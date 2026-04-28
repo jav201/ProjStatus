@@ -41,8 +41,12 @@ def build_addendum(
     after: ProjectSnapshot,
 ) -> Addendum:
     changed_files, diffs = snapshot_diff(before, after)
+    if changed_files:
+        summary_first = f"Updated {', '.join(changed_files)}"
+    else:
+        summary_first = f"Saved {after.project.name}"
     summary = [
-        f"Saved {after.project.name}",
+        summary_first,
         f"{len(after.project.tasks)} tasks across {len(after.project.board_columns)} columns",
         f"{len(after.project.milestones)} milestones and {len(after.project.people)} people",
     ]

@@ -42,6 +42,15 @@
 
   <article class="card">
     <h2>Roadblocks</h2>
+    {% set blocked_count = blocked_tasks|length %}
+    {% set has_roadblock_notes = sections.roadblocks and sections.roadblocks.strip() %}
+    <p class="roadblock-summary">
+      <strong>{{ blocked_count }}</strong> blocked task{{ '' if blocked_count == 1 else 's' }}
+      <span class="muted"> · </span>
+      <strong>{{ '1' if has_roadblock_notes else '0' }}</strong> roadblock note{{ '' if has_roadblock_notes else 's' }}
+      {% if blocked_count == 0 and not has_roadblock_notes %}<span class="muted"> · all clear ✅</span>{% endif %}
+    </p>
+
     {% if blocked_tasks %}
       <ul class="simple-list">
         {% for task in blocked_tasks %}
@@ -54,12 +63,10 @@
           </li>
         {% endfor %}
       </ul>
-    {% else %}
-      <p class="muted">No blocked tasks. ✅</p>
     {% endif %}
 
-    {% if sections.roadblocks %}
-      <div class="section-divider"></div>
+    {% if has_roadblock_notes %}
+      {% if blocked_tasks %}<div class="section-divider"></div>{% endif %}
       <h3>Notes</h3>
       <div class="markdown-body">{{ sections.roadblocks | markdownify | safe }}</div>
     {% endif %}

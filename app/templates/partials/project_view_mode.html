@@ -41,10 +41,16 @@
       <strong>{{ project.tasks|length }}</strong>
       <small>{{ project.board_columns|join(" / ") }}</small>
     </article>
-    <article class="view-kpi-card danger">
+    {% set has_roadblock_notes = roadblock_body and roadblock_body.strip() %}
+    {% set total_roadblocks = blocked_tasks|length + (1 if has_roadblock_notes else 0) %}
+    <article class="view-kpi-card{% if total_roadblocks %} danger{% endif %}">
       <span>Roadblocks</span>
       <strong>{{ blocked_tasks|length }}</strong>
-      <small>{% if blocked_tasks %}Needs follow-up{% else %}No blocked tasks right now{% endif %}</small>
+      <small>
+        {% if blocked_tasks %}{{ blocked_tasks|length }} blocked task{{ '' if blocked_tasks|length == 1 else 's' }}{% else %}0 blocked tasks{% endif %}
+        ·
+        {% if has_roadblock_notes %}1 note documented{% else %}0 notes{% endif %}
+      </small>
     </article>
   </section>
 
