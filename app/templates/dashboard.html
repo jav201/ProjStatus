@@ -35,7 +35,7 @@
   <form class="filters card" method="get" action="{{ request.url_for('dashboard') }}">
     <label>
       Search
-      <input type="search" name="search" value="{{ search }}" placeholder="Find a project, owner, or role" oninput="this.form.submit()">
+      <input type="search" name="search" value="{{ search }}" placeholder="Find a project, owner, or role" oninput="this.form.submit()" autocomplete="off">
     </label>
     <label>
       Health
