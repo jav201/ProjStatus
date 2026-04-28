@@ -241,68 +241,102 @@ function showToast(message, level) {
 }
 
 function initializeTaskSidePanel() {
-  const panel = document.querySelector("[data-task-panel]");
+  const editPanel = document.querySelector("[data-task-panel]");
+  const addPanel = document.querySelector("[data-add-task-panel]");
   const backdrop = document.querySelector("[data-task-panel-backdrop]");
-  const form = document.querySelector("[data-task-form]");
-  if (!panel || !backdrop || !form) {
+  if (!backdrop || (!editPanel && !addPanel)) {
     return;
   }
-  const closeBtn = panel.querySelector("[data-task-panel-close]");
-  const deleteBtn = panel.querySelector("[data-task-delete]");
 
-  const close = () => {
-    panel.classList.remove("is-open");
-    backdrop.classList.remove("is-open");
-    panel.setAttribute("aria-hidden", "true");
+  const setOpen = (panel, isOpen) => {
+    if (!panel) return;
+    panel.classList.toggle("is-open", isOpen);
+    panel.setAttribute("aria-hidden", isOpen ? "false" : "true");
   };
-  closeBtn.addEventListener("click", close);
-  backdrop.addEventListener("click", close);
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && panel.classList.contains("is-open")) close();
-  });
+  const openPanel = (panel) => {
+    if (!panel) return;
+    // Only one drawer at a time.
+    if (panel === editPanel) setOpen(addPanel, false);
+    if (panel === addPanel) setOpen(editPanel, false);
+    setOpen(panel, true);
+    backdrop.classList.add("is-open");
+  };
+  const closeAll = () => {
+    setOpen(editPanel, false);
+    setOpen(addPanel, false);
+    backdrop.classList.remove("is-open");
+  };
 
-  document.querySelectorAll(".task-card").forEach((card) => {
-    card.addEventListener("click", (event) => {
-      // ignore clicks that bubble up from drag operations
-      if (event.target.closest(".sortable-fallback") || card.classList.contains("sortable-chosen")) return;
-      const dataNode = card.querySelector(".task-data");
-      if (!dataNode) return;
-      const data = JSON.parse(dataNode.textContent || "{}");
-      form.action = card.dataset.editUrl;
-      form.elements.title.value = data.title || "";
-      form.elements.description.value = data.description || "";
-      form.elements.column.value = data.column || "";
-      form.elements.priority.value = data.priority || "medium";
-      form.elements.start_date.value = data.start_date || "";
-      form.elements.due_date.value = data.due_date || "";
-      form.elements.milestone_id.value = data.milestone_id || "";
-      form.elements.notes.value = data.notes || "";
-      form.elements.change_note.value = "";
-      const assignees = new Set(data.assignee_ids || []);
-      // assignee_ids is a NodeList of checkboxes (RadioNodeList when multiple match)
-      const checkboxes = form.querySelectorAll('input[type="checkbox"][name="assignee_ids"]');
-      checkboxes.forEach((box) => {
-        box.checked = assignees.has(box.value);
+  // Edit panel: card-click populates the form, Close button + Delete button.
+  if (editPanel) {
+    const form = editPanel.querySelector("[data-task-form]");
+    const closeBtn = editPanel.querySelector("[data-task-panel-close]");
+    const deleteBtn = editPanel.querySelector("[data-task-delete]");
+    if (closeBtn) closeBtn.addEventListener("click", closeAll);
+
+    if (form) {
+      document.querySelectorAll(".task-card").forEach((card) => {
+        card.addEventListener("click", (event) => {
+          // ignore clicks that bubble up from drag operations
+          if (event.target.closest(".sortable-fallback") || card.classList.contains("sortable-chosen")) return;
+          const dataNode = card.querySelector(".task-data");
+          if (!dataNode) return;
+          const data = JSON.parse(dataNode.textContent || "{}");
+          form.action = card.dataset.editUrl;
+          form.elements.title.value = data.title || "";
+          form.elements.description.value = data.description || "";
+          form.elements.column.value = data.column || "";
+          form.elements.priority.value = data.priority || "medium";
+          form.elements.start_date.value = data.start_date || "";
+          form.elements.due_date.value = data.due_date || "";
+          form.elements.milestone_id.value = data.milestone_id || "";
+          form.elements.notes.value = data.notes || "";
+          form.elements.change_note.value = "";
+          const assignees = new Set(data.assignee_ids || []);
+          const checkboxes = form.querySelectorAll('input[type="checkbox"][name="assignee_ids"]');
+          checkboxes.forEach((box) => {
+            box.checked = assignees.has(box.value);
+          });
+          if (deleteBtn) deleteBtn.dataset.url = card.dataset.deleteUrl;
+          openPanel(editPanel);
+        });
       });
-      deleteBtn.dataset.url = card.dataset.deleteUrl;
-      panel.classList.add("is-open");
-      backdrop.classList.add("is-open");
-      panel.setAttribute("aria-hidden", "false");
-    });
-  });
+    }
 
-  deleteBtn.addEventListener("click", () => {
-    if (!deleteBtn.dataset.url) return;
-    if (!confirm("Delete this task?")) return;
-    const deleteForm = document.createElement("form");
-    deleteForm.method = "POST";
-    deleteForm.action = deleteBtn.dataset.url;
-    const note = document.createElement("input");
-    note.name = "change_note";
-    note.value = "Deleted from side panel";
-    deleteForm.appendChild(note);
-    document.body.appendChild(deleteForm);
-    deleteForm.submit();
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", () => {
+        if (!deleteBtn.dataset.url) return;
+        if (!confirm("Delete this task?")) return;
+        const deleteForm = document.createElement("form");
+        deleteForm.method = "POST";
+        deleteForm.action = deleteBtn.dataset.url;
+        const note = document.createElement("input");
+        note.name = "change_note";
+        note.value = "Deleted from side panel";
+        deleteForm.appendChild(note);
+        document.body.appendChild(deleteForm);
+        deleteForm.submit();
+      });
+    }
+  }
+
+  // Add panel: trigger button opens, Close button closes.
+  if (addPanel) {
+    const closeBtn = addPanel.querySelector("[data-add-task-panel-close]");
+    if (closeBtn) closeBtn.addEventListener("click", closeAll);
+    document.querySelectorAll("[data-add-task-open]").forEach((btn) => {
+      btn.addEventListener("click", () => openPanel(addPanel));
+    });
+  }
+
+  // Shared dismissal: backdrop click and Escape key.
+  backdrop.addEventListener("click", closeAll);
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    const anyOpen =
+      (editPanel && editPanel.classList.contains("is-open")) ||
+      (addPanel && addPanel.classList.contains("is-open"));
+    if (anyOpen) closeAll();
   });
 }
 
