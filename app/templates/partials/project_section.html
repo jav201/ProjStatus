@@ -1,10 +1,4 @@
 <section class="card">
-  <div class="subtabs">
-    {% for item in ['content', 'change_requests', 'roadblocks', 'notes'] %}
-      <a class="{% if section_name == item %}active{% endif %}" href="{{ request.url_for('project_section', slug=project.slug, section=item) }}">{{ item.replace('_', ' ') }}</a>
-    {% endfor %}
-  </div>
-
   <div class="grid-two">
     <article>
       <h2>Edit {{ section_name.replace('_', ' ') }}</h2>

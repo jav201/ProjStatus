@@ -147,7 +147,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
     async def inbox(request: Request, filter: str = "all") -> HTMLResponse:
         addendums = storage.list_recent_addendums(limit=50, include_archived=False)
         cutoff = datetime.now() - timedelta(hours=24)
-        if filter == "unread":
+        if filter == "last_24h":
             addendums = [(slug, addendum) for slug, addendum in addendums if addendum.created_at >= cutoff]
         groups: dict[str, list[tuple[str, Any]]] = {}
         for slug, addendum in addendums:
@@ -1115,7 +1115,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
 
 
 def render_markdown(value: str) -> str:
-    return markdown(value or "", extensions=["fenced_code", "tables", "sane_lists"])
+    return markdown(value or "", extensions=["fenced_code", "tables", "sane_lists", "nl2br"])
 
 
 _DICT_KEY_RE = __import__("re").compile(r"^[A-Za-z_][\w]*$")
