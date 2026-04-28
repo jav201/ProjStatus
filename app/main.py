@@ -1181,18 +1181,21 @@ def build_sidebar_context(storage: StorageService, request: Request, page_contex
     elif path.startswith("/risks"):
         active_nav = "risks"
 
-    today = date.today()
-    cutoff = today - timedelta(days=7)
-    inbox_count = 0
     risks_count = 0
     sidebar_projects: list[dict[str, Any]] = []
     for entry in storage.list_dashboard_projects(sort_by="recent_update", include_archived=False):
         sidebar_projects.append({"slug": entry.slug, "name": entry.name, "health": entry.health.value})
-        if entry.recent_addendum_at and entry.recent_addendum_at.date() >= cutoff:
-            inbox_count += 1
         if entry.health.value == "blocked":
             risks_count += 1
         risks_count += entry.roadblock_count
+
+    # Match the Inbox page's "Last 24h · N" segmented-control count.
+    inbox_cutoff = datetime.now() - timedelta(hours=24)
+    inbox_count = sum(
+        1
+        for _, addendum in storage.list_recent_addendums(limit=50, include_archived=False)
+        if addendum.created_at >= inbox_cutoff
+    )
 
     breadcrumb_trail = build_breadcrumbs(active_nav, request, page_context)
 
