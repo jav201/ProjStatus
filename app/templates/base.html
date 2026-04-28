@@ -88,7 +88,6 @@
         </nav>
         <form class="global-search" method="get" action="{{ request.url_for('dashboard') }}" role="search">
           <input type="search" name="search" placeholder="Search projects, owners, roles…" value="{{ request.query_params.get('search', '') }}" autocomplete="off">
-          <span class="global-search-shortcut">⌘K</span>
         </form>
         <button class="button button-subtle theme-toggle" type="button" data-theme-toggle aria-label="Toggle dark mode">
           <span data-theme-label>Dark mode</span>
