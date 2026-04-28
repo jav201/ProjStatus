@@ -1235,7 +1235,8 @@ def build_breadcrumbs(active_nav: str, request: Request, page_context: dict[str,
     if active_nav in template_pages:
         crumbs.append({"label": template_pages[active_nav], "url": ""})
     elif active_nav == "project" and project:
-        crumbs.append({"label": "Projects", "url": str(request.url_for("dashboard"))})
+        # Workspace already points to the dashboard; the dropped "Projects"
+        # crumb pointed there too, doubling up the same target.
         crumbs.append({"label": project.name, "url": ""})
     return crumbs
 

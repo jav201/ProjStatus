@@ -22,7 +22,7 @@
             <h3 class="muted day-heading">{{ day }}</h3>
             <ul class="simple-list inbox-list">
               {% for slug, addendum in items %}
-                {% set summary = addendum.summary[0] if addendum.summary else (addendum.note or 'Saved project') %}
+                {% set summary = addendum.note or (addendum.summary[0] if addendum.summary else 'Saved project') %}
                 <li>
                   <a href="{{ request.url_for('project_history', slug=slug) }}?entry={{ addendum.id }}">
                     <span class="inbox-avatar">{{ slug.split('-')[0][:2].upper() }}</span>
