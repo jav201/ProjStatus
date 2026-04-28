@@ -31,6 +31,13 @@ function bindOutsideClickClose() {
       if (!d.contains(event.target)) d.removeAttribute("open");
     });
   });
+  // Escape closes the same dropdowns. Task side-panels have their own Escape handler.
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    document.querySelectorAll("details.menu[open], details.health-chip[open]").forEach((d) => {
+      d.removeAttribute("open");
+    });
+  });
 }
 
 document.body.addEventListener("htmx:afterSwap", () => {
