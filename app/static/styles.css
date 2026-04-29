@@ -30,7 +30,7 @@
   --surface-strong: rgba(12, 21, 38, 0.96);
   --surface-muted: rgba(13, 25, 44, 0.88);
   --ink: #e8f1ff;
-  --muted: #9bb1ca;
+  --muted: #c9d6ea;
   --line: rgba(133, 165, 205, 0.18);
   --accent: #3794ff;
   --accent-strong: #1f6feb;
@@ -269,8 +269,9 @@ button:hover {
 }
 
 .button-danger {
-  background: var(--danger-soft);
-  border-color: rgba(214, 69, 80, 0.24);
+  background: rgba(214, 69, 80, 0.22);
+  border-color: rgba(214, 69, 80, 0.42);
+  color: var(--danger);
 }
 
 .button-subtle {
@@ -663,7 +664,8 @@ select[multiple] {
 }
 
 .chip-danger {
-  background: var(--danger-soft);
+  background: rgba(214, 69, 80, 0.22);
+  color: var(--danger);
 }
 
 .timeline-editor {

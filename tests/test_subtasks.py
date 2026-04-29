@@ -199,3 +199,115 @@ def test_plan_tab_renders_add_dropdown(tmp_path: Path) -> None:
     timeline = client.get("/projects/dropdown-project/timeline")
     assert timeline.status_code == 200
     assert 'data-add-open="milestone"' in timeline.text
+
+
+# ---------------------------------------------------------------------------
+# Milestone list with Edit / Delete on the Plan tab.
+# ---------------------------------------------------------------------------
+
+
+def test_milestone_edit_panel_present_on_plan_tabs(tmp_path: Path) -> None:
+    client = TestClient(create_app(tmp_path))
+    client.post("/projects/new", data={"name": "Milestone UI"}, follow_redirects=True)
+    client.post(
+        "/projects/milestone-ui/milestones",
+        data={"title": "Kickoff", "target_date": "2026-05-01", "status": "planned", "return_to": "plan"},
+        follow_redirects=True,
+    )
+
+    for path in ("/projects/milestone-ui/board", "/projects/milestone-ui/timeline"):
+        page = client.get(path)
+        assert page.status_code == 200
+        assert 'data-add-panel="milestone-edit"' in page.text, path
+        assert 'data-edit-milestone' in page.text, path
+        assert 'data-delete-milestone' in page.text, path
+        assert 'class="milestone-data"' in page.text, path
+        assert 'Kickoff' in page.text, path
+
+
+def test_milestone_list_renders_per_row_data(tmp_path: Path) -> None:
+    client = TestClient(create_app(tmp_path))
+    client.post("/projects/new", data={"name": "Two Stones"}, follow_redirects=True)
+    for title, target in [("First", "2026-05-15"), ("Second", "2026-06-15")]:
+        client.post(
+            "/projects/two-stones/milestones",
+            data={"title": title, "target_date": target, "status": "planned", "return_to": "plan"},
+            follow_redirects=True,
+        )
+
+    board = client.get("/projects/two-stones/board")
+    assert board.status_code == 200
+    assert board.text.count('class="milestone-data"') == 2
+    assert "First" in board.text
+    assert "Second" in board.text
+
+
+def test_milestone_update_via_plan_redirects_to_board(tmp_path: Path) -> None:
+    client = TestClient(create_app(tmp_path))
+    client.post("/projects/new", data={"name": "Update Flow"}, follow_redirects=True)
+    client.post(
+        "/projects/update-flow/milestones",
+        data={"title": "Old", "target_date": "2026-05-01", "status": "planned", "return_to": "plan"},
+        follow_redirects=True,
+    )
+    storage = _storage(tmp_path)
+    mid = storage.load_project("update-flow").project.milestones[0].id
+
+    response = client.post(
+        f"/projects/update-flow/milestones/{mid}",
+        data={
+            "title": "New title",
+            "target_date": "2026-05-10",
+            "status": "active",
+            "owner_person_id": "",
+            "notes": "Refined",
+            "return_to": "plan",
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "/projects/update-flow/board" in response.headers["location"]
+
+    refreshed = storage.load_project("update-flow").project.milestones[0]
+    assert refreshed.title == "New title"
+    assert refreshed.status.value == "active"
+
+
+def test_milestone_delete_via_plan_clears_task_link_and_redirects(tmp_path: Path) -> None:
+    client = TestClient(create_app(tmp_path))
+    client.post("/projects/new", data={"name": "Delete Flow"}, follow_redirects=True)
+    client.post(
+        "/projects/delete-flow/milestones",
+        data={"title": "Doomed", "target_date": "2026-05-01", "status": "planned", "return_to": "plan"},
+        follow_redirects=True,
+    )
+    storage = _storage(tmp_path)
+    mid = storage.load_project("delete-flow").project.milestones[0].id
+
+    client.post(
+        "/projects/delete-flow/tasks",
+        data={"title": "Linked task", "column": "Backlog", "priority": "medium", "milestone_id": mid},
+        follow_redirects=True,
+    )
+
+    response = client.post(
+        f"/projects/delete-flow/milestones/{mid}/delete",
+        data={"return_to": "plan"},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    assert "/projects/delete-flow/board" in response.headers["location"]
+
+    after = storage.load_project("delete-flow").project
+    assert after.milestones == []
+    assert after.tasks[0].milestone_id is None
+
+
+def test_empty_milestone_list_shows_hint(tmp_path: Path) -> None:
+    client = TestClient(create_app(tmp_path))
+    client.post("/projects/new", data={"name": "No Stones"}, follow_redirects=True)
+    board = client.get("/projects/no-stones/board")
+    assert board.status_code == 200
+    assert "milestones-empty" in board.text
+    # The hint points users at the existing dropdown rather than a missing button.
+    assert "+ ▾" in board.text or "Add milestone" in board.text
