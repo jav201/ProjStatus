@@ -98,6 +98,16 @@ To add a third object type, append a `<button data-add-open="risk">` to the menu
 
 The Add Milestone form posts a hidden `return_to=plan` so `milestone_create/update/delete` redirect to the Board instead of the default Summary; existing call sites without that field keep the unchanged Summary redirect (see `milestone_return_url` in `app/main.py`).
 
+### Plan-tab milestone list (Edit / Delete)
+
+`app/templates/partials/_milestones_list.html` renders a per-milestone row with Edit and Delete buttons; it's included by both `project_board.html` and `project_timeline.html`. Each row carries an embedded `<script type="application/json" class="milestone-data">` block — the same pattern used by task cards. Clicking **Edit** populates the `data-add-panel="milestone-edit"` aside in `_plan_add_panels.html` (its form has no preset `action`; `app.js` sets `form.action = row.dataset.editUrl` before opening). Clicking **Delete** builds a hidden form that POSTs `change_note` and `return_to=plan` to the row's `data-delete-url`, mirroring the task-delete flow.
+
+The `milestone_update` route coerces the form-string `status` through `MilestoneStatus(...)` before assigning it back to the model — Pydantic v2 doesn't validate-on-assign by default for plain `BaseModel`, and `render_timeline` calls `.value` on the enum, so a raw string would crash on the next save. Keep that coercion when changing the route.
+
+### Theming and contrast
+
+Theme is `html[data-theme="light" | "dark"]`, persisted in `localStorage["projstatus-theme"]`. Palettes live in `app/static/styles.css` `:root` (light) and `:root[data-theme="dark"]`. Dark `--muted` is `#c9d6ea` (lifted from `#9bb1ca` to clear WCAG-AA against the dark surface — most "muted" text in the app reads through this variable, so override it locally if a specific surface ends up too bright rather than tightening the variable). Dark-mode tweaks for `.button-danger`, `.chip-danger`, and form placeholders live at the bottom of `app/static/styles.redesign.css`. `.button-primary` declares `color: white` once and works in both themes.
+
 ### Storage layout on disk
 
 ```

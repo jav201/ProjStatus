@@ -1,0 +1,44 @@
+{# Plan-tab milestones list — Edit/Delete UI mirroring the task card pattern.
+   Open the side panel in partials/_plan_add_panels.html (data-add-panel="milestone-edit"),
+   driven by app.js. project.milestones / people_map are already in the render context. #}
+<section class="card milestones-card">
+  <div class="section-heading">
+    <div>
+      <h2>Milestones</h2>
+      <p class="muted">Edit or delete a milestone. Use the <strong>+ ▾</strong> menu above to add one.</p>
+    </div>
+  </div>
+  {% if project.milestones %}
+    <ul class="milestones-list">
+      {% for m in project.milestones %}
+        <li>
+          <article class="milestone-row" data-milestone-id="{{ m.id }}"
+                   data-edit-url="{{ request.url_for('milestone_update', slug=project.slug, milestone_id=m.id) }}"
+                   data-delete-url="{{ request.url_for('milestone_delete', slug=project.slug, milestone_id=m.id) }}">
+            <span class="milestone-status status-{{ m.status.value }}" title="Status: {{ m.status.value }}">{{ m.status.value }}</span>
+            <strong class="milestone-title">{{ m.title }}</strong>
+            <span class="milestone-meta">
+              {% if m.target_date %}<span class="chip-muted">◷ {{ m.target_date }}</span>{% endif %}
+              {% if m.owner_person_id and people_map.get(m.owner_person_id) %}<span class="chip-muted">{{ people_map[m.owner_person_id].name }}</span>{% endif %}
+            </span>
+            <div class="milestone-actions">
+              <button type="button" class="button button-subtle" data-edit-milestone>Edit</button>
+              <button type="button" class="button button-danger button-subtle" data-delete-milestone>Delete</button>
+            </div>
+            <script type="application/json" class="milestone-data">
+              {
+                "title": {{ m.title|tojson }},
+                "owner_person_id": {{ (m.owner_person_id or "")|tojson }},
+                "target_date": {{ (format_date(m.target_date) or "")|tojson }},
+                "status": {{ m.status.value|tojson }},
+                "notes": {{ m.notes|tojson }}
+              }
+            </script>
+          </article>
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted milestones-empty">No milestones yet. Open the <strong>+ ▾</strong> menu and pick <em>Add milestone</em> to create one.</p>
+  {% endif %}
+</section>
