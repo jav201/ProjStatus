@@ -349,6 +349,52 @@ function initializeTaskSidePanel() {
     }
   }
 
+  // Milestone row edit/delete — populates the milestone-edit side panel from the
+  // row's embedded JSON (mirrors the task card edit pattern). Delete builds and
+  // submits a hidden form so we keep the same change-note + return_to wiring as
+  // the rest of the milestone routes.
+  const milestoneEditPanel = document.querySelector('[data-add-panel="milestone-edit"]');
+  if (milestoneEditPanel) {
+    const editForm = milestoneEditPanel.querySelector("[data-milestone-edit-form]");
+    document.querySelectorAll(".milestone-row").forEach((row) => {
+      const editBtn = row.querySelector("[data-edit-milestone]");
+      const deleteBtn = row.querySelector("[data-delete-milestone]");
+      const dataNode = row.querySelector(".milestone-data");
+      if (editBtn && editForm && dataNode) {
+        editBtn.addEventListener("click", () => {
+          const data = JSON.parse(dataNode.textContent || "{}");
+          editForm.action = row.dataset.editUrl;
+          editForm.elements.title.value = data.title || "";
+          editForm.elements.target_date.value = data.target_date || "";
+          editForm.elements.status.value = data.status || "planned";
+          editForm.elements.owner_person_id.value = data.owner_person_id || "";
+          editForm.elements.notes.value = data.notes || "";
+          editForm.elements.change_note.value = "";
+          openPanel(milestoneEditPanel);
+        });
+      }
+      if (deleteBtn) {
+        deleteBtn.addEventListener("click", () => {
+          if (!row.dataset.deleteUrl) return;
+          if (!confirm("Delete this milestone?")) return;
+          const form = document.createElement("form");
+          form.method = "POST";
+          form.action = row.dataset.deleteUrl;
+          const note = document.createElement("input");
+          note.name = "change_note";
+          note.value = "Deleted from milestone list";
+          const ret = document.createElement("input");
+          ret.name = "return_to";
+          ret.value = "plan";
+          form.appendChild(note);
+          form.appendChild(ret);
+          document.body.appendChild(form);
+          form.submit();
+        });
+      }
+    });
+  }
+
   // Shared dismissal: backdrop click and Escape key.
   backdrop.addEventListener("click", closeAll);
   document.addEventListener("keydown", (event) => {

@@ -76,3 +76,32 @@
     </div>
   </form>
 </aside>
+
+<aside class="task-side-panel" data-add-panel="milestone-edit" aria-hidden="true">
+  <div class="section-heading">
+    <h2>Edit milestone</h2>
+    <button type="button" class="button button-subtle" data-add-close>Close</button>
+  </div>
+  {# Form action is set by app.js from the row's data-edit-url before opening. #}
+  <form class="form-grid" method="post" data-milestone-edit-form>
+    <input type="hidden" name="return_to" value="plan">
+    <label class="full-span">Title<input type="text" name="title" required></label>
+    <label>Target date<input type="date" name="target_date"></label>
+    <label>Status
+      <select name="status">
+        {% for value in ['planned','active','complete','blocked'] %}<option value="{{ value }}">{{ value }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="full-span">Owner
+      <select name="owner_person_id">
+        <option value="">Unassigned</option>
+        {% for person in project.people %}<option value="{{ person.id }}">{{ person.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="full-span">Notes<textarea name="notes" rows="2"></textarea></label>
+    <label class="full-span">Addendum note<input type="text" name="change_note" placeholder="Why this change?"></label>
+    <div class="full-span actions-row">
+      <button class="button button-primary" type="submit">Save milestone</button>
+    </div>
+  </form>
+</aside>

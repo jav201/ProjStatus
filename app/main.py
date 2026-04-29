@@ -23,6 +23,7 @@ from app.models import (
     ExportRequest,
     HealthStatus,
     Milestone,
+    MilestoneStatus,
     Person,
     Priority,
     Project,
@@ -537,7 +538,10 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         milestone.title = title.strip()
         milestone.owner_person_id = owner_person_id or None
         milestone.target_date = parse_date(target_date_value)
-        milestone.status = status
+        try:
+            milestone.status = MilestoneStatus(status)
+        except ValueError:
+            milestone.status = MilestoneStatus.PLANNED
         milestone.notes = notes.strip()
         storage.save_project(
             loaded.project,
