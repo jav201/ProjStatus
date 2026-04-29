@@ -77,6 +77,12 @@ class Milestone(BaseModel):
     notes: str = ""
 
 
+class Subtask(BaseModel):
+    id: str = Field(default_factory=lambda: make_id("sub"))
+    title: str
+    done: bool = False
+
+
 class Task(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -90,6 +96,7 @@ class Task(BaseModel):
     milestone_id: str | None = None
     priority: Priority = Priority.MEDIUM
     notes: str = ""
+    subtasks: list[Subtask] = Field(default_factory=list)
 
     @field_validator("assignee_ids", mode="before")
     @classmethod
