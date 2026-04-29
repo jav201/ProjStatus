@@ -249,11 +249,14 @@ function showToast(message, level) {
 
 function initializeTaskSidePanel() {
   const editPanel = document.querySelector("[data-task-panel]");
-  const addPanel = document.querySelector("[data-add-task-panel]");
+  const addPanels = Array.from(document.querySelectorAll("[data-add-panel]"));
   const backdrop = document.querySelector("[data-task-panel-backdrop]");
-  if (!backdrop || (!editPanel && !addPanel)) {
+  if (!backdrop || (!editPanel && addPanels.length === 0)) {
     return;
   }
+
+  const allPanels = addPanels.slice();
+  if (editPanel) allPanels.push(editPanel);
 
   const setOpen = (panel, isOpen) => {
     if (!panel) return;
@@ -263,22 +266,40 @@ function initializeTaskSidePanel() {
   const openPanel = (panel) => {
     if (!panel) return;
     // Only one drawer at a time.
-    if (panel === editPanel) setOpen(addPanel, false);
-    if (panel === addPanel) setOpen(editPanel, false);
+    allPanels.forEach((other) => {
+      if (other !== panel) setOpen(other, false);
+    });
     setOpen(panel, true);
     backdrop.classList.add("is-open");
   };
   const closeAll = () => {
-    setOpen(editPanel, false);
-    setOpen(addPanel, false);
+    allPanels.forEach((panel) => setOpen(panel, false));
     backdrop.classList.remove("is-open");
   };
+
+  // Add panels (task, milestone, …): each `[data-add-panel="X"]` is opened by
+  // any `[data-add-open="X"]` trigger and closed by `[data-add-close]` inside.
+  addPanels.forEach((panel) => {
+    const kind = panel.dataset.addPanel;
+    document.querySelectorAll(`[data-add-open="${kind}"]`).forEach((btn) => {
+      btn.addEventListener("click", () => {
+        // If the trigger lives inside <details class="add-menu">, snap it shut.
+        const menu = btn.closest("details.add-menu");
+        if (menu) menu.open = false;
+        openPanel(panel);
+      });
+    });
+    panel.querySelectorAll("[data-add-close]").forEach((btn) => {
+      btn.addEventListener("click", closeAll);
+    });
+  });
 
   // Edit panel: card-click populates the form, Close button + Delete button.
   if (editPanel) {
     const form = editPanel.querySelector("[data-task-form]");
     const closeBtn = editPanel.querySelector("[data-task-panel-close]");
     const deleteBtn = editPanel.querySelector("[data-task-delete]");
+    const subtasksController = form ? createSubtasksController(form.querySelector("[data-subtasks]")) : null;
     if (closeBtn) closeBtn.addEventListener("click", closeAll);
 
     if (form) {
@@ -304,6 +325,7 @@ function initializeTaskSidePanel() {
           checkboxes.forEach((box) => {
             box.checked = assignees.has(box.value);
           });
+          if (subtasksController) subtasksController.load(data.subtasks || []);
           if (deleteBtn) deleteBtn.dataset.url = card.dataset.deleteUrl;
           openPanel(editPanel);
         });
@@ -327,24 +349,90 @@ function initializeTaskSidePanel() {
     }
   }
 
-  // Add panel: trigger button opens, Close button closes.
-  if (addPanel) {
-    const closeBtn = addPanel.querySelector("[data-add-task-panel-close]");
-    if (closeBtn) closeBtn.addEventListener("click", closeAll);
-    document.querySelectorAll("[data-add-task-open]").forEach((btn) => {
-      btn.addEventListener("click", () => openPanel(addPanel));
-    });
-  }
-
   // Shared dismissal: backdrop click and Escape key.
   backdrop.addEventListener("click", closeAll);
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    const anyOpen =
-      (editPanel && editPanel.classList.contains("is-open")) ||
-      (addPanel && addPanel.classList.contains("is-open"));
+    const anyOpen = allPanels.some((panel) => panel.classList.contains("is-open"));
     if (anyOpen) closeAll();
   });
+}
+
+function createSubtasksController(fieldset) {
+  if (!fieldset) return null;
+  const list = fieldset.querySelector("[data-subtasks-rows]");
+  const addBtn = fieldset.querySelector("[data-subtasks-add]");
+  const hidden = fieldset.querySelector("[data-subtasks-json]");
+  if (!list || !addBtn || !hidden) return null;
+
+  let items = [];
+
+  const sync = () => {
+    hidden.value = JSON.stringify(items);
+  };
+
+  const renderRow = (item, index) => {
+    const li = document.createElement("li");
+    li.className = "subtasks-row";
+    li.dataset.index = String(index);
+
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.checked = !!item.done;
+    check.addEventListener("change", () => {
+      items[index].done = check.checked;
+      li.classList.toggle("is-done", check.checked);
+      sync();
+    });
+
+    const title = document.createElement("input");
+    title.type = "text";
+    title.value = item.title || "";
+    title.placeholder = "Subtask";
+    title.className = "subtasks-title";
+    title.addEventListener("input", () => {
+      items[index].title = title.value;
+      sync();
+    });
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "button button-subtle subtasks-remove";
+    remove.setAttribute("aria-label", "Remove subtask");
+    remove.textContent = "×";
+    remove.addEventListener("click", () => {
+      items.splice(index, 1);
+      render();
+    });
+
+    li.classList.toggle("is-done", !!item.done);
+    li.append(check, title, remove);
+    return li;
+  };
+
+  const render = () => {
+    list.replaceChildren(...items.map(renderRow));
+    sync();
+  };
+
+  addBtn.addEventListener("click", () => {
+    items.push({ id: "", title: "", done: false });
+    render();
+    const last = list.lastElementChild;
+    const titleInput = last ? last.querySelector(".subtasks-title") : null;
+    if (titleInput) titleInput.focus();
+  });
+
+  return {
+    load(initial) {
+      items = (initial || []).map((entry) => ({
+        id: String(entry.id || ""),
+        title: String(entry.title || ""),
+        done: !!entry.done,
+      }));
+      render();
+    },
+  };
 }
 
 function initializeMermaidEditor() {

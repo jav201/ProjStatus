@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -26,7 +27,9 @@ from app.models import (
     Priority,
     Project,
     ProjectStatus,
+    Subtask,
     Task,
+    make_id,
 )
 from app.services.exports import ExportService
 from app.services.mermaid import import_timeline, render_timeline
@@ -53,6 +56,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
     templates = Jinja2Templates(directory=str(config.templates_dir))
     templates.env.filters["markdownify"] = render_markdown
     templates.env.filters["when"] = format_when
+    templates.env.filters["model_list_json"] = model_list_json
     templates.env.globals["format_date"] = format_date
     templates.env.globals["format_when"] = format_when
 
@@ -495,6 +499,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         status: str = Form("planned"),
         notes: str = Form(""),
         change_note: str = Form(""),
+        return_to: str = Form(""),
     ) -> RedirectResponse:
         loaded = safe_load_project(storage, slug)
         loaded.project.milestones.append(
@@ -512,7 +517,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             note=change_note.strip() or f"Added milestone '{title.strip()}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
         )
-        return redirect_to(request.url_for("project_overview", slug=slug), "Milestone added.", "success")
+        return redirect_to(milestone_return_url(request, slug, return_to), "Milestone added.", "success")
 
     @app.post("/projects/{slug}/milestones/{milestone_id}", name="milestone_update")
     async def update_milestone(
@@ -525,6 +530,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         status: str = Form("planned"),
         notes: str = Form(""),
         change_note: str = Form(""),
+        return_to: str = Form(""),
     ) -> RedirectResponse:
         loaded = safe_load_project(storage, slug)
         milestone = find_item(loaded.project.milestones, milestone_id)
@@ -539,10 +545,16 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             note=change_note.strip() or f"Updated milestone '{milestone.title}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
         )
-        return redirect_to(request.url_for("project_overview", slug=slug), "Milestone updated.", "success")
+        return redirect_to(milestone_return_url(request, slug, return_to), "Milestone updated.", "success")
 
     @app.post("/projects/{slug}/milestones/{milestone_id}/delete", name="milestone_delete")
-    async def delete_milestone(request: Request, slug: str, milestone_id: str, change_note: str = Form("")) -> RedirectResponse:
+    async def delete_milestone(
+        request: Request,
+        slug: str,
+        milestone_id: str,
+        change_note: str = Form(""),
+        return_to: str = Form(""),
+    ) -> RedirectResponse:
         loaded = safe_load_project(storage, slug)
         loaded.project.milestones = [item for item in loaded.project.milestones if item.id != milestone_id]
         for task in loaded.project.tasks:
@@ -554,7 +566,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             note=change_note.strip() or "Deleted milestone",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
         )
-        return redirect_to(request.url_for("project_overview", slug=slug), "Milestone deleted.", "success")
+        return redirect_to(milestone_return_url(request, slug, return_to), "Milestone deleted.", "success")
 
     @app.post("/projects/{slug}/tasks", name="task_create")
     async def create_task(request: Request, slug: str) -> RedirectResponse:
@@ -601,6 +613,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         task.milestone_id = str(form.get("milestone_id", "")) or None
         task.priority = str(form.get("priority", Priority.MEDIUM.value))
         task.notes = str(form.get("notes", "")).strip()
+        task.subtasks = parse_subtasks_payload(str(form.get("subtasks_json", "")), task.subtasks)
         storage.save_project(
             loaded.project,
             loaded.sections,
@@ -1123,6 +1136,27 @@ def render_markdown(value: str) -> str:
     return markdown(value or "", extensions=["fenced_code", "tables", "sane_lists", "nl2br"])
 
 
+def model_list_json(values: list[Any]) -> Any:
+    """Jinja filter: serialize a list of Pydantic models as JSON for embedding in markup.
+
+    `tojson` alone can't handle Pydantic v2 models; this dumps each via `model_dump`
+    first. Returns a Markup-safe string so it isn't HTML-entity-escaped inside the
+    `<script type="application/json">` block (mirrors Jinja's built-in `tojson`).
+    """
+    from markupsafe import Markup
+
+    payload = [item.model_dump(mode="json") if hasattr(item, "model_dump") else item for item in values or []]
+    # Match Jinja's htmlsafe_json_dumps escapes so the result is safe in attributes too.
+    encoded = (
+        json.dumps(payload)
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace("'", "\\u0027")
+    )
+    return Markup(encoded)
+
+
 _DICT_KEY_RE = __import__("re").compile(r"^[A-Za-z_][\w]*$")
 
 
@@ -1130,12 +1164,63 @@ def _is_valid_dictionary_key(key: str) -> bool:
     return bool(key) and _DICT_KEY_RE.match(key) is not None
 
 
+def milestone_return_url(request: Request, slug: str, return_to: str) -> str:
+    """Pick the redirect target for milestone routes based on an opt-in form field.
+
+    Default Summary keeps existing call sites unchanged; the Plan-tab Add Milestone
+    form opts in by posting return_to=plan so the user stays on the Board.
+    """
+    if return_to == "plan":
+        return str(request.url_for("project_board", slug=slug))
+    return str(request.url_for("project_overview", slug=slug))
+
+
+def parse_subtasks_payload(raw: str, existing: list[Subtask]) -> list[Subtask]:
+    """Decode the hidden subtasks_json field into a normalized Subtask list.
+
+    Reuses existing IDs so addendum diffs stay tight when a user only toggles or
+    retitles. Blank titles are dropped silently — empty rows in the UI are not
+    persisted.
+    """
+    raw = raw.strip()
+    if not raw:
+        return list(existing)
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return list(existing)
+    if not isinstance(payload, list):
+        return list(existing)
+    by_id = {sub.id: sub for sub in existing}
+    new_list: list[Subtask] = []
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        title = str(entry.get("title", "")).strip()
+        if not title:
+            continue
+        sid = str(entry.get("id", "")).strip()
+        prior = by_id.get(sid) if sid else None
+        if not sid:
+            sid = make_id("sub")
+        new_list.append(Subtask(id=sid, title=title, done=bool(entry.get("done", prior.done if prior else False))))
+    return new_list
+
+
+def task_completion(task: Task) -> float:
+    if task.column == "Done":
+        return 1.0
+    if not task.subtasks:
+        return 0.0
+    done = sum(1 for sub in task.subtasks if sub.done)
+    return done / len(task.subtasks)
+
+
 def progress_pct(project: Project) -> float:
     total = len(project.tasks)
     if not total:
         return 0.0
-    done = sum(1 for task in project.tasks if task.column == "Done")
-    return done / total
+    return sum(task_completion(task) for task in project.tasks) / total
 
 
 def days_blocked(addendums: list[Any], task_id: str, today: date) -> int | None:

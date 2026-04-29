@@ -70,6 +70,7 @@ Pydantic v2, `StrEnum` everywhere. A few load-bearing details:
 
 - IDs: `make_id(prefix)` → `f"{prefix}_{uuid4().hex[:8]}"`. The Mermaid parser keys off these prefixes (`task_…`, `milestone_…`).
 - `Task.column` is the kanban column; the `blocked` boolean was migrated away — `migrate_legacy_blocked` rewrites old `{"blocked": true}` JSON into `column: "Blocked"` on load. Don't reintroduce a separate `blocked` field.
+- `Task.subtasks: list[Subtask]` lives only in `project.json` — `mermaid.py` never sees it. `task_completion(task)` returns 1.0 when `column == "Done"`; otherwise it's `done/total` over subtasks (0.0 with no subtasks). `progress_pct(project)` averages `task_completion` across all tasks. So adding subtasks to a non-Done task lifts the project KPI; moving a task to Done still scores 1.0 regardless of unchecked subtasks.
 - `DictionaryEntry.key` and `DocumentTemplateField.key` must match `[A-Za-z_][\w]*` (validated by `_is_valid_dictionary_key` in `main.py` and the Jinja tag inspector).
 - The default board columns come from `AppConfig.default_board_columns` (`Backlog / In Progress / Blocked / Done`). Mermaid status emission in `render_timeline` is hard-coded to those names; renaming columns will break Gantt status colors until you update `mermaid.py`.
 
@@ -84,6 +85,18 @@ Pydantic v2, `StrEnum` everywhere. A few load-bearing details:
 ### Routes layout
 
 All ~70 routes live in `app/main.py` inside `create_app`. Pages are server-rendered HTML; mutation endpoints are `POST` form submits that 303-redirect back to a GET (htmx is used selectively for partial swaps and drag-and-drop). Templates are split between full-page templates in `app/templates/` and project-tab partials in `app/templates/partials/`. The `render_template` helper merges every page with the sidebar/breadcrumb context built by `build_sidebar_context` — use it instead of `templates.TemplateResponse` directly so the shell stays consistent.
+
+### Plan-tab Add menu (extensible)
+
+The "+" dropdown next to the Board/Gantt segmented toggle (`app/templates/project.html`) opens one of the side panels in `app/templates/partials/_plan_add_panels.html` (Add Task, Add Milestone). The wiring uses a generic attribute convention discovered in `initializeTaskSidePanel` (`app/static/app.js`):
+
+- Trigger: `<button data-add-open="X">` (X = `task` | `milestone` | …)
+- Panel: `<aside data-add-panel="X">`
+- Close button inside the panel: `<button data-add-close>`
+
+To add a third object type, append a `<button data-add-open="risk">` to the menu, append a `<aside data-add-panel="risk">` to the partial, and write the route. No JS changes needed.
+
+The Add Milestone form posts a hidden `return_to=plan` so `milestone_create/update/delete` redirect to the Board instead of the default Summary; existing call sites without that field keep the unchanged Summary redirect (see `milestone_return_url` in `app/main.py`).
 
 ### Storage layout on disk
 
