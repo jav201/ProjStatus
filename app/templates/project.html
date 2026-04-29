@@ -111,9 +111,18 @@
     </nav>
 
     {% if is_plan %}
-      <div class="segmented plan-toggle">
-        <a class="{% if active_tab == 'board' %}is-active{% endif %}" href="{{ request.url_for('project_board', slug=project.slug) }}">Board</a>
-        <a class="{% if active_tab == 'timeline' %}is-active{% endif %}" href="{{ request.url_for('project_timeline', slug=project.slug) }}">Gantt</a>
+      <div class="plan-toolbar">
+        <div class="segmented plan-toggle">
+          <a class="{% if active_tab == 'board' %}is-active{% endif %}" href="{{ request.url_for('project_board', slug=project.slug) }}">Board</a>
+          <a class="{% if active_tab == 'timeline' %}is-active{% endif %}" href="{{ request.url_for('project_timeline', slug=project.slug) }}">Gantt</a>
+        </div>
+        <details class="add-menu">
+          <summary class="button button-primary" aria-haspopup="menu" aria-label="Add to plan">+ <span class="add-menu-caret" aria-hidden="true">▾</span></summary>
+          <div class="add-menu-pop" role="menu">
+            <button type="button" role="menuitem" data-add-open="task">Add task</button>
+            <button type="button" role="menuitem" data-add-open="milestone">Add milestone</button>
+          </div>
+        </details>
       </div>
     {% endif %}
 
@@ -127,4 +136,8 @@
   {% endif %}
 
   {% include tab_template %}
+
+  {% if not present_mode and is_plan %}
+    {% include "partials/_plan_add_panels.html" %}
+  {% endif %}
 {% endblock %}
