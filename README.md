@@ -55,6 +55,34 @@ python -m playwright install chromium
 
 - HTML and PPTX exports work without Playwright. PNG export is the only feature that requires Playwright plus an installed Chromium browser.
 
+## Configure your data folder
+
+By default ProjStatus stores data next to the code (the repo's `projects/`, `exports/`, etc.). To point it at a different folder — typically a OneDrive- or SharePoint-synced mount so a backup happens automatically — set environment variables before launching:
+
+```
+export PROJSTATUS_DATA_ROOT=/path/to/your/projstatus-data
+export PROJSTATUS_USER=alice
+export PROJSTATUS_PEER_ROOTS=bob=/path/to/Bobs/projstatus-data,maria=/path/to/Marias/projstatus-data
+python -m uvicorn app.main:app --reload
+```
+
+- `PROJSTATUS_DATA_ROOT` — your own writable folder. Created if missing.
+- `PROJSTATUS_USER` — your name; tagged on every save and shown in the inbox.
+- `PROJSTATUS_PEER_ROOTS` — comma-separated `label=path` pairs of teammates' folders. **Read-only**. Their changes appear in your inbox as rows tagged `peer · <label>`; you can't edit a peer project from the app (open the file in OneDrive directly if you need to).
+
+The same settings can also be put in `~/.config/projstatus/config.toml`:
+
+```toml
+data_root = "/Users/alice/OneDrive - Acme/projstatus-data"
+user      = "alice"
+peer_roots = [
+  { label = "bob",   path = "/Users/alice/OneDrive - Acme/Shared - Bob/projstatus-data" },
+  { label = "maria", path = "/Users/alice/OneDrive - Acme/Shared - Maria/projstatus-data" },
+]
+```
+
+Each project gains a `CHANGELOG.md` next to its `project.json` — a one-line-per-save log you can read directly in OneDrive without launching the app.
+
 ## Storage layout
 
 Each project is stored under `projects/<slug>/`:

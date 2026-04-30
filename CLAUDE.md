@@ -104,6 +104,22 @@ The Add Milestone form posts a hidden `return_to=plan` so `milestone_create/upda
 
 The `milestone_update` route coerces the form-string `status` through `MilestoneStatus(...)` before assigning it back to the model — Pydantic v2 doesn't validate-on-assign by default for plain `BaseModel`, and `render_timeline` calls `.value` on the enum, so a raw string would crash on the next save. Keep that coercion when changing the route.
 
+### Per-machine settings (`app/settings.py`)
+
+`Settings.load(code_root)` reads (env > `~/.config/projstatus/config.toml` > defaults) and produces three things consumed by `create_app()`:
+
+- `data_root` — controls where projects, exports, and template folders live. `PROJSTATUS_DATA_ROOT`; defaults to the repo root. Auto-`mkdir -p`'d at startup; if the parent doesn't exist either, the app exits loudly so a typo doesn't silently land in the wrong place.
+- `peer_roots: list[(label, path)]` — read-only references that feed the inbox. `PROJSTATUS_PEER_ROOTS=label=path,label=path`. Missing or unreadable peer roots log a one-time stderr warning per `(label, path)` and are skipped — peer reads must never break the inbox.
+- `user` — the configured username. `PROJSTATUS_USER`; defaults to `os.getlogin()` then `"unknown"`. Tests pass `root_dir` to `create_app(root_dir)` to bypass `Settings.load()`; in that path `user` defaults to `"test"`. The setting is stored on `app.state.user` and read by `current_actor(request)`; routes pass `actor=current_actor(request)` to every `save_project` call so addendums and CHANGELOG.md lines record who made the change.
+
+### Per-project rolling CHANGELOG.md
+
+Every `save_project` appends one human-readable line to `<project_dir>/CHANGELOG.md` via `_append_changelog` in `storage.py`: `YYYY-MM-DD HH:MM — actor — first-summary-line[ — note]`. Append-only and intentionally **not** tracked in `sync_state` — manual edits don't trigger the external-changes banner because the file is a downstream view, not an input. The structured `history/<timestamp>.json` files remain authoritative; the markdown exists for OneDrive-side browsing without launching the app.
+
+### Cross-folder inbox
+
+`storage.read_peer_addendums(peer_roots, limit)` builds a throwaway `StorageService` per peer root and calls its `list_recent_addendums`. The `/inbox` route merges `(own, peer_label, slug, addendum)` triples and the template renders peer rows as non-link spans tagged with a `peer · <label>` chip — peer projects are not navigable in v1, only visible in the activity log. `build_sidebar_context` includes peer counts in the inbox badge so the badge matches what the page shows.
+
 ### Theming and contrast
 
 Theme is `html[data-theme="light" | "dark"]`, persisted in `localStorage["projstatus-theme"]`. Palettes live in `app/static/styles.css` `:root` (light) and `:root[data-theme="dark"]`. Dark `--muted` is `#c9d6ea` (lifted from `#9bb1ca` to clear WCAG-AA against the dark surface — most "muted" text in the app reads through this variable, so override it locally if a specific surface ends up too bright rather than tightening the variable). Dark-mode tweaks for `.button-danger`, `.chip-danger`, and form placeholders live at the bottom of `app/static/styles.redesign.css`. `.button-primary` declares `color: white` once and works in both themes.
