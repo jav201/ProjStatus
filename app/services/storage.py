@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import sys
 import zipfile
 from datetime import date, datetime, timedelta
 from io import BytesIO
@@ -46,6 +47,25 @@ def _write_text(path: Path, content: str) -> None:
     keeps content stable across saves regardless of platform.
     """
     path.write_text(content, encoding="utf-8", newline="\n")
+
+
+def _append_changelog(project_dir: Path, addendum: Addendum) -> None:
+    """Append one human-readable line per save to <project_dir>/CHANGELOG.md.
+
+    Format: `YYYY-MM-DD HH:MM — actor — first-summary-line[ — note]`
+    Append-only; not tracked in sync_state. The structured `history/<timestamp>.json`
+    files remain authoritative; this file exists for OneDrive-side browsing without
+    launching the app.
+    """
+    path = project_dir / "CHANGELOG.md"
+    stamp = addendum.created_at.strftime("%Y-%m-%d %H:%M")
+    headline = (addendum.summary[0] if addendum.summary else "Saved").strip()
+    parts = [stamp, addendum.actor or "unknown", headline]
+    if addendum.note:
+        parts.append(addendum.note.strip())
+    line = " — ".join(p for p in parts if p) + "\n"
+    existing = path.read_text(encoding="utf-8") if path.exists() else ""
+    _write_text(path, existing + line)
 
 
 def _heal_section_text(text: str) -> str:
@@ -445,10 +465,13 @@ class StorageService:
         project: Project,
         sections: dict[SectionName, str],
         note: str = "",
-        actor: str = "web",
+        actor: str | None = None,
         timeline_text: str | None = None,
         preserve_timeline: bool = False,
     ) -> Addendum:
+        # actor=None preserves the legacy "web" tag for callers that didn't migrate;
+        # routes pass actor=current_actor(request) to record the configured user.
+        actor = actor or "web"
         project_dir = self._project_dir(project.slug)
         history_dir = project_dir / "history"
         project_dir.mkdir(parents=True, exist_ok=True)
@@ -482,6 +505,7 @@ class StorageService:
         addendum = build_addendum(entry_id, datetime.now(), note, actor, before, snapshot)
         _write_text(history_dir / f"{entry_id}.json", dumps_pretty(addendum.model_dump(mode="json")))
         _write_text(history_dir / f"{entry_id}.md", render_addendum_markdown(addendum))
+        _append_changelog(project_dir, addendum)
         return addendum
 
     def restore_history(self, slug: str, addendum_id: str, note: str = "") -> Addendum:
@@ -701,3 +725,39 @@ def build_render_context(template: DocumentTemplate, project: Project) -> dict[s
         if entry.key:
             context[entry.key] = entry.value
     return context
+
+
+_PEER_WARNED: set[str] = set()
+
+
+def read_peer_addendums(
+    peer_roots: list[tuple[str, Path]], limit: int = 50
+) -> list[tuple[str, str, "Addendum"]]:
+    """Aggregate recent addendums from peer data roots for the cross-folder inbox.
+
+    Each peer is read with its own throwaway StorageService against an
+    AppConfig.from_root(...) — this is read-only for our purposes (we never call
+    save_project on a peer config). Missing peer paths are skipped with a one-time
+    stderr warning per (label, path) pair so a stale config doesn't crash the inbox.
+
+    Returns a flat list of (peer_label, project_slug, Addendum), newest first.
+    """
+    results: list[tuple[str, str, Addendum]] = []
+    for label, root in peer_roots:
+        if not root.exists() or not (root / "projects").exists():
+            key = f"{label}={root}"
+            if key not in _PEER_WARNED:
+                print(
+                    f"[projstatus] Peer root {label!r} not available at {root}; skipping.",
+                    file=sys.stderr,
+                )
+                _PEER_WARNED.add(key)
+            continue
+        try:
+            peer_config = AppConfig.from_root(root)
+            peer_storage = StorageService(peer_config)
+            for slug, addendum in peer_storage.list_recent_addendums(limit=limit, include_archived=False):
+                results.append((label, slug, addendum))
+        except Exception as exc:  # noqa: BLE001 — peer reads must never break the inbox
+            print(f"[projstatus] Failed reading peer {label!r}: {exc}", file=sys.stderr)
+    return results
