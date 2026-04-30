@@ -34,13 +34,22 @@ from app.models import (
 )
 from app.services.exports import ExportService
 from app.services.mermaid import import_timeline, render_timeline
-from app.services.storage import SECTION_NAMES, StorageService, inspect_docx_tags
+from app.services.storage import SECTION_NAMES, StorageService, inspect_docx_tags, read_peer_addendums
+from app.settings import Settings
 from app.utils import format_date, format_when, parse_date, slugify
 
 
 def create_app(root_dir: Path | None = None) -> FastAPI:
     code_root = Path(__file__).resolve().parents[1]
-    data_root = (root_dir or code_root).resolve()
+    if root_dir is None:
+        settings = Settings.load(code_root=code_root)
+        data_root = settings.data_root
+        user = settings.user
+        peer_roots = settings.peer_roots
+    else:
+        data_root = Path(root_dir).resolve()
+        user = "test"
+        peer_roots = []
     config = AppConfig(
         root_dir=data_root,
         projects_dir=data_root / "projects",
@@ -65,6 +74,8 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
     app.state.storage = storage
     app.state.exports = exports
     app.state.templates = templates
+    app.state.user = user
+    app.state.peer_roots = peer_roots
     app.mount("/static", StaticFiles(directory=config.static_dir), name="static")
 
     @app.get("/", response_class=HTMLResponse, name="dashboard")
@@ -150,13 +161,22 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
 
     @app.get("/inbox", response_class=HTMLResponse, name="inbox")
     async def inbox(request: Request, filter: str = "all") -> HTMLResponse:
-        addendums = storage.list_recent_addendums(limit=50, include_archived=False)
+        own = [
+            ("you", slug, addendum)
+            for slug, addendum in storage.list_recent_addendums(limit=50, include_archived=False)
+        ]
+        peers = read_peer_addendums(request.app.state.peer_roots, limit=50)
+        merged = sorted(own + peers, key=lambda t: t[2].created_at, reverse=True)[:50]
         cutoff = datetime.now() - timedelta(hours=24)
         if filter == "last_24h":
-            addendums = [(slug, addendum) for slug, addendum in addendums if addendum.created_at >= cutoff]
+            merged = [item for item in merged if item[2].created_at >= cutoff]
+        # Keep the legacy `(slug, addendum)` shape downstream so existing template
+        # bindings keep working; tuck the label onto the addendum object.
+        addendums = [(slug, addendum) for _, slug, addendum in merged]
         groups: dict[str, list[tuple[str, Any]]] = {}
-        for slug, addendum in addendums:
-            groups.setdefault(addendum.created_at.strftime("%Y-%m-%d"), []).append((slug, addendum))
+        for label, slug, addendum in merged:
+            addendum.actor = addendum.actor or "unknown"
+            groups.setdefault(addendum.created_at.strftime("%Y-%m-%d"), []).append((slug, addendum, label))
         sync_notices: list[dict[str, Any]] = []
         for entry in storage.list_dashboard_projects(include_archived=False):
             loaded = storage.load_project(entry.slug)
@@ -435,6 +455,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or "Updated project details",
             preserve_timeline=preserve_timeline,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_overview", slug=slug), "Project details saved.", "success")
 
@@ -517,6 +538,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or f"Added milestone '{title.strip()}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(milestone_return_url(request, slug, return_to), "Milestone added.", "success")
 
@@ -548,6 +570,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or f"Updated milestone '{milestone.title}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(milestone_return_url(request, slug, return_to), "Milestone updated.", "success")
 
@@ -569,6 +592,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or "Deleted milestone",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(milestone_return_url(request, slug, return_to), "Milestone deleted.", "success")
 
@@ -597,6 +621,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=str(form.get("change_note", "")).strip() or f"Added task '{title}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_board", slug=slug), "Task added.", "success")
 
@@ -623,6 +648,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=str(form.get("change_note", "")).strip() or f"Updated task '{task.title}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_board", slug=slug), "Task updated.", "success")
 
@@ -635,6 +661,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or "Deleted task",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_board", slug=slug), "Task deleted.", "success")
 
@@ -652,6 +679,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=f"Moved task '{task.title}' to {column}",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return JSONResponse({"ok": True, "column": column})
 
@@ -671,6 +699,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or f"Added person '{name.strip()}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_people", slug=slug), "Person added.", "success")
 
@@ -694,6 +723,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or f"Updated person '{person.name}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_people", slug=slug), "Person updated.", "success")
 
@@ -734,6 +764,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or "Deleted person",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_people", slug=slug), "Person deleted.", "success")
 
@@ -751,6 +782,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or f"Added access category '{name.strip()}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_dictionary", slug=slug), "Access category added.", "success")
 
@@ -770,6 +802,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or f"Renamed access category to '{category.name}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_dictionary", slug=slug), "Access category updated.", "success")
 
@@ -794,6 +827,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or "Deleted access category",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_dictionary", slug=slug), "Access category deleted.", "success")
 
@@ -818,6 +852,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or f"Added access link '{label.strip()}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_dictionary", slug=slug), "Access link added.", "success")
 
@@ -845,6 +880,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or f"Updated access link '{link.label}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_dictionary", slug=slug), "Access link updated.", "success")
 
@@ -864,6 +900,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or "Deleted access link",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_dictionary", slug=slug), "Access link deleted.", "success")
 
@@ -899,6 +936,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or f"Added dictionary entry '{clean_key}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_dictionary", slug=slug), "Dictionary entry added.", "success")
 
@@ -937,6 +975,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or f"Updated dictionary entry '{clean_key}'",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_dictionary", slug=slug), "Dictionary entry updated.", "success")
 
@@ -954,6 +993,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or "Deleted dictionary entry",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_dictionary", slug=slug), "Dictionary entry deleted.", "success")
 
@@ -974,6 +1014,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or f"Updated {section_name.replace('_', ' ')}",
             preserve_timeline=not loaded.project.sync_state.timeline_is_app_owned,
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_section", slug=slug, section=section_name), "Section saved.", "success")
 
@@ -993,6 +1034,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
                 loaded.sections,
                 note=change_note.strip() or "Updated timeline",
                 timeline_text=timeline_text,
+                actor=current_actor(request),
             )
             message = "Timeline saved and synced into project data."
             level = "success"
@@ -1003,6 +1045,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
                 note=change_note.strip() or "Saved timeline as visual-only update",
                 timeline_text=timeline_text,
                 preserve_timeline=True,
+                actor=current_actor(request),
             )
             message = "Timeline saved, but unsupported Mermaid changes were preserved as visual-only content."
             level = "warning"
@@ -1020,6 +1063,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             loaded.sections,
             note=change_note.strip() or "Regenerated timeline from project data",
             timeline_text=render_timeline(loaded.project),
+            actor=current_actor(request),
         )
         return redirect_to(request.url_for("project_timeline", slug=slug), "Timeline regenerated.", "success")
 
@@ -1242,6 +1286,11 @@ def days_blocked(addendums: list[Any], task_id: str, today: date) -> int | None:
     return max((today - addendums[-1].created_at.date()).days, 0)
 
 
+def current_actor(request: Request) -> str:
+    """Configured username for `save_project(actor=…)`. Set in create_app from Settings.user."""
+    return getattr(request.app.state, "user", "") or "unknown"
+
+
 def render_template(request: Request, template_name: str, context: dict[str, Any]) -> HTMLResponse:
     templates: Jinja2Templates = request.app.state.templates
     storage: StorageService = request.app.state.storage
@@ -1258,8 +1307,6 @@ def render_template(request: Request, template_name: str, context: dict[str, Any
 
 def build_sidebar_context(storage: StorageService, request: Request, page_context: dict[str, Any]) -> dict[str, Any]:
     """Sidebar + breadcrumb context shared across every page."""
-    import os
-
     path = request.url.path
     active_nav = "dashboard"
     if path.startswith("/projects/new") or path == "/projects/new":
@@ -1283,20 +1330,19 @@ def build_sidebar_context(storage: StorageService, request: Request, page_contex
             risks_count += 1
         risks_count += entry.roadblock_count
 
-    # Match the Inbox page's "Last 24h · N" segmented-control count.
+    # Match the Inbox page's "Last 24h · N" segmented-control count — include peers
+    # so the badge reflects what the inbox itself will show.
     inbox_cutoff = datetime.now() - timedelta(hours=24)
-    inbox_count = sum(
-        1
-        for _, addendum in storage.list_recent_addendums(limit=50, include_archived=False)
-        if addendum.created_at >= inbox_cutoff
+    own_recent = storage.list_recent_addendums(limit=50, include_archived=False)
+    peer_recent = read_peer_addendums(getattr(request.app.state, "peer_roots", []), limit=50)
+    inbox_count = sum(1 for _, a in own_recent if a.created_at >= inbox_cutoff) + sum(
+        1 for _, _, a in peer_recent if a.created_at >= inbox_cutoff
     )
 
     breadcrumb_trail = build_breadcrumbs(active_nav, request, page_context)
 
-    try:
-        identity = os.getlogin().split(".")[0].split("_")[0].title()
-    except OSError:
-        identity = "You"
+    raw_user = getattr(request.app.state, "user", "") or "You"
+    identity = raw_user.split(".")[0].split("_")[0].title()
 
     active_project_slug = ""
     if active_nav == "project":

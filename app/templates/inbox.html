@@ -21,16 +21,27 @@
           <article class="card">
             <h3 class="muted day-heading">{{ day }}</h3>
             <ul class="simple-list inbox-list">
-              {% for slug, addendum in items %}
+              {% for slug, addendum, peer_label in items %}
                 {% set summary = addendum.note or (addendum.summary[0] if addendum.summary else 'Saved project') %}
-                <li>
-                  <a href="{{ request.url_for('project_history', slug=slug) }}?entry={{ addendum.id }}">
-                    <span class="inbox-avatar">{{ slug.split('-')[0][:2].upper() }}</span>
+                {% set is_peer = peer_label and peer_label != 'you' %}
+                <li class="inbox-row {% if is_peer %}is-peer{% endif %}">
+                  {% if is_peer %}
                     <span class="inbox-body">
-                      <strong>{{ summary }}</strong>
-                      <small class="muted">{{ slug }}</small>
+                      <span class="inbox-avatar">{{ slug.split('-')[0][:2].upper() }}</span>
+                      <span class="inbox-text">
+                        <strong>{{ summary }}</strong>
+                        <small class="muted">{{ slug }} · <span class="inbox-actor">{{ addendum.actor }}</span> · <span class="chip-muted inbox-peer">peer · {{ peer_label }}</span></small>
+                      </span>
                     </span>
-                  </a>
+                  {% else %}
+                    <a href="{{ request.url_for('project_history', slug=slug) }}?entry={{ addendum.id }}">
+                      <span class="inbox-avatar">{{ slug.split('-')[0][:2].upper() }}</span>
+                      <span class="inbox-text">
+                        <strong>{{ summary }}</strong>
+                        <small class="muted">{{ slug }} · <span class="inbox-actor">{{ addendum.actor }}</span></small>
+                      </span>
+                    </a>
+                  {% endif %}
                   <span class="inbox-when">{{ addendum.created_at | when }}</span>
                 </li>
               {% endfor %}
