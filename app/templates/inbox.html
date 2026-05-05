@@ -26,11 +26,14 @@
                 {% set is_peer = peer_label and peer_label != 'you' %}
                 <li class="inbox-row {% if is_peer %}is-peer{% endif %}">
                   {% if is_peer %}
+                    {# LLR-005.3: peer-supplied actor is rendered as a CLAIM, not authority.
+                       The "(claimed)" qualifier is greppable and ensures a peer's actor
+                       field cannot visually masquerade as a local-app actor. #}
                     <span class="inbox-body">
                       <span class="inbox-avatar">{{ slug.split('-')[0][:2].upper() }}</span>
                       <span class="inbox-text">
                         <strong>{{ summary }}</strong>
-                        <small class="muted">{{ slug }} · <span class="inbox-actor">{{ addendum.actor }}</span> · <span class="chip-muted inbox-peer">peer · {{ peer_label }}</span></small>
+                        <small class="muted">{{ slug }} · <span class="inbox-actor">{{ addendum.actor }} <em class="inbox-claimed">(claimed)</em></span> · <span class="chip-muted inbox-peer">peer · {{ peer_label }}</span></small>
                       </span>
                     </span>
                   {% else %}

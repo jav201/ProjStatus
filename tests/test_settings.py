@@ -39,9 +39,11 @@ def test_peer_roots_parsed_from_env(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("app.settings.CONFIG_PATH", tmp_path / "missing.toml")
 
     settings = Settings.load()
-    labels = [label for label, _ in settings.peer_roots]
+    labels = [label for label, _, _ in settings.peer_roots]
     assert labels == ["bob", "luis"]
     assert settings.peer_roots[0][1] == bob.expanduser()
+    # Env-var path has no writable syntax — every entry resolves to writable=False.
+    assert all(triple[2] is False for triple in settings.peer_roots)
 
 
 def test_malformed_peer_roots_skipped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -50,7 +52,7 @@ def test_malformed_peer_roots_skipped(tmp_path: Path, monkeypatch: pytest.Monkey
     monkeypatch.setattr("app.settings.CONFIG_PATH", tmp_path / "missing.toml")
 
     settings = Settings.load()
-    labels = [label for label, _ in settings.peer_roots]
+    labels = [label for label, _, _ in settings.peer_roots]
     assert labels == ["real"]
 
 
@@ -71,3 +73,5 @@ def test_toml_file_used_when_env_missing(tmp_path: Path, monkeypatch: pytest.Mon
     assert settings.data_root == target.resolve()
     assert settings.user == "carla"
     assert settings.peer_roots[0][0] == "ana"
+    # No `writable` key in the TOML entry → defaults to False per LLR-002.1.
+    assert settings.peer_roots[0][2] is False

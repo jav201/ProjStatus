@@ -1,0 +1,71 @@
+graph TD
+    subgraph Configuration["Configuration sources (env > config.toml > default)"]
+        ENV[PROJSTATUS_DATA_ROOT<br/>PROJSTATUS_PEER_ROOTS<br/>PROJSTATUS_USER]
+        TOML["~/.config/projstatus/config.toml<br/>data_root, user,<br/>[[peer_roots]] label/path/writable"]
+    end
+
+    subgraph SettingsLoad["Settings.load (app/settings.py)"]
+        ResolveData["_resolve_data_root"]
+        ResolvePeers["_resolve_peer_roots<br/>list of label,path,writable"]
+        ResolveUser["_resolve_user<br/>+ _sanitize_user_candidate"]
+        Demote["_demote_dangerous_writable_peers<br/>13 predicates"]
+    end
+
+    SettingsObj["Settings dataclass<br/>data_root, peer_roots, user"]
+
+    subgraph CreateApp["create_app (app/main.py)"]
+        AppState["app.state<br/>config, storage, user, peer_roots"]
+        WritableRoots["writable_roots = data_root + writable peer paths"]
+        JinjaGlobal["templates.env.globals['iso_week_label']"]
+    end
+
+    subgraph StorageLayer["StorageService (app/services/storage.py)"]
+        Init["__init__ canonicalizes writable_roots"]
+        SaveProject["save_project"]
+        CheckWritable["_check_writable<br/>LLR-003.1 + LLR-003.3"]
+        CheckActor["_check_actor_for_peer_write<br/>LLR-013.1"]
+        WriteText["_write_text"]
+        AppendCL["_append_changelog<br/>+ _sanitize_changelog_field"]
+    end
+
+    subgraph WeekHelper["iso_week_label (app/utils.py)"]
+        IsoWeek["iso_week_label(d) returns Wnn or empty"]
+    end
+
+    subgraph Surfaces["Three week-label surfaces"]
+        TaskChip["project_board.html:23<br/>span.week-chip"]
+        MilestoneChip["_milestones_list.html:21<br/>span.week-chip"]
+        MermaidAxis["mermaid.py:50<br/>axisFormat %b %d W%V"]
+    end
+
+    subgraph Routes["FastAPI routes"]
+        SettingsPage["GET /settings"]
+        Inbox["GET /inbox + read_peer_addendums"]
+        ProjectMutations["POST /projects/.. mutations"]
+    end
+
+    ENV --> ResolveData
+    ENV --> ResolvePeers
+    ENV --> ResolveUser
+    TOML --> ResolveData
+    TOML --> ResolvePeers
+    TOML --> ResolveUser
+    ResolvePeers --> Demote
+    ResolveData --> Demote
+    Demote --> SettingsObj
+    ResolveUser --> SettingsObj
+    SettingsObj --> AppState
+    SettingsObj --> WritableRoots
+    WritableRoots --> Init
+    Init --> SaveProject
+    SaveProject --> CheckWritable
+    CheckWritable -->|pass| CheckActor
+    CheckActor -->|pass| WriteText
+    SaveProject --> AppendCL
+    JinjaGlobal --> IsoWeek
+    IsoWeek --> TaskChip
+    IsoWeek --> MilestoneChip
+    MermaidAxis -.uses ISO_WEEK_AXIS_TOKEN.-> WeekHelper
+    AppState --> SettingsPage
+    AppState --> Inbox
+    ProjectMutations --> SaveProject

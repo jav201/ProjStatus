@@ -37,6 +37,18 @@ from app.utils import dumps_pretty, now_stamp, sha1_text, slugify
 SECTION_NAMES: tuple[SectionName, ...] = ("content", "change_requests", "roadblocks", "notes")
 
 
+class PeerWriteForbidden(PermissionError):
+    """Raised when save_project targets a path outside any writable_root.
+
+    Carries a `peer_label` attribute when the rejection is for a non-writable peer
+    so phase-3 callers / phase-4 tests can classify the error without parsing text.
+    """
+
+    def __init__(self, message: str, peer_label: str | None = None) -> None:
+        super().__init__(message)
+        self.peer_label = peer_label
+
+
 def _write_text(path: Path, content: str) -> None:
     """Write text to disk with explicit \\n line endings.
 
@@ -49,20 +61,51 @@ def _write_text(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8", newline="\n")
 
 
+_CHANGELOG_FIELD_MAX_LEN = 200
+
+
+def _sanitize_changelog_field(raw: str) -> str:
+    """LLR-013.3: sanitization pipeline for CHANGELOG.md headline / note fields.
+
+    Order (load-bearing — see CR-001 closure rationale):
+      1. Replace any `\\r` or `\\n` with a single space.
+      2. Pre-escape `&` → `&amp;` so existing entity sequences in user input cannot
+         survive the next step and reconstruct in a downstream HTML viewer (CR-001).
+      3. Escape pipe / brackets / angle brackets — `|`, `[`, `]`, `<`, `>` — to
+         their numeric/named HTML entities. Pipes break Markdown table renderers;
+         brackets enable markdown-link injection; angle brackets enable HTML-tag
+         injection (CR-001 / phase-2 N-S-003).
+      4. Cap at 200 characters POST-escape so the disk-resident line length is the
+         hard ground truth (phase-2 N-S-002).
+    """
+    text = raw.replace("\r", " ").replace("\n", " ")
+    text = text.replace("&", "&amp;")
+    text = (
+        text.replace("|", "&#124;")
+        .replace("[", "&#91;")
+        .replace("]", "&#93;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+    return text[:_CHANGELOG_FIELD_MAX_LEN]
+
+
 def _append_changelog(project_dir: Path, addendum: Addendum) -> None:
     """Append one human-readable line per save to <project_dir>/CHANGELOG.md.
 
     Format: `YYYY-MM-DD HH:MM — actor — first-summary-line[ — note]`
     Append-only; not tracked in sync_state. The structured `history/<timestamp>.json`
     files remain authoritative; this file exists for OneDrive-side browsing without
-    launching the app.
+    launching the app. Headline and note are sanitized via `_sanitize_changelog_field`
+    (LLR-013.3) so cross-user injection through writable peers is blocked.
     """
     path = project_dir / "CHANGELOG.md"
     stamp = addendum.created_at.strftime("%Y-%m-%d %H:%M")
-    headline = (addendum.summary[0] if addendum.summary else "Saved").strip()
+    headline_raw = (addendum.summary[0] if addendum.summary else "Saved").strip()
+    headline = _sanitize_changelog_field(headline_raw)
     parts = [stamp, addendum.actor or "unknown", headline]
     if addendum.note:
-        parts.append(addendum.note.strip())
+        parts.append(_sanitize_changelog_field(addendum.note.strip()))
     line = " — ".join(p for p in parts if p) + "\n"
     existing = path.read_text(encoding="utf-8") if path.exists() else ""
     _write_text(path, existing + line)
@@ -82,12 +125,21 @@ def _heal_section_text(text: str) -> str:
 
 
 class StorageService:
-    def __init__(self, config: AppConfig) -> None:
+    def __init__(
+        self,
+        config: AppConfig,
+        writable_roots: list[Path] | None = None,
+    ) -> None:
         self.config = config
         self.config.projects_dir.mkdir(parents=True, exist_ok=True)
         self.config.exports_dir.mkdir(parents=True, exist_ok=True)
         self.config.project_templates_dir.mkdir(parents=True, exist_ok=True)
         self.config.document_templates_dir.mkdir(parents=True, exist_ok=True)
+        # LLR-003.2: writable_roots defaults to [data_root] (= projects_dir.parent).
+        # LLR-003.3: every entry is canonicalized via Path.resolve(strict=False) so the
+        # subsequent containment check (LLR-003.1) is symlink/.. /Windows-alias safe.
+        roots = writable_roots if writable_roots is not None else [self.config.projects_dir.parent]
+        self._writable_roots: list[Path] = [Path(r).resolve(strict=False) for r in roots]
 
     def list_dashboard_projects(
         self,
@@ -473,6 +525,14 @@ class StorageService:
         # routes pass actor=current_actor(request) to record the configured user.
         actor = actor or "web"
         project_dir = self._project_dir(project.slug)
+        # LLR-003.1: gate writes against writable_roots BEFORE any _write_text call.
+        # If project_dir does not lie under a writable root, this raises and no file
+        # on disk is touched.
+        self._check_writable(project_dir)
+        # LLR-013.1 + N-S-001 ordering: identity check runs AFTER the writable-roots
+        # check so a non-writable target produces a writability error regardless of
+        # actor state. data_root writes with actor="unknown" remain permitted (A-010).
+        self._check_actor_for_peer_write(project_dir, actor)
         history_dir = project_dir / "history"
         project_dir.mkdir(parents=True, exist_ok=True)
         history_dir.mkdir(parents=True, exist_ok=True)
@@ -537,6 +597,44 @@ class StorageService:
 
     def _project_dir(self, slug: str) -> Path:
         return self.config.projects_dir / slug
+
+    def _check_writable(self, project_dir: Path) -> None:
+        """LLR-003.1 + LLR-003.3: reject writes outside any canonicalized writable_root.
+
+        Resolves `project_dir` and every `self._writable_roots` entry, then uses
+        `Path.is_relative_to` for symlink/`..`/Windows-alias-safe containment.
+        """
+        resolved_target = project_dir.resolve(strict=False)
+        for root in self._writable_roots:
+            if resolved_target.is_relative_to(root):
+                return
+        raise PeerWriteForbidden(
+            f"Write rejected: {resolved_target} is not under any writable root "
+            f"(writable_roots={[str(r) for r in self._writable_roots]}). "
+            "If this is a peer-root path, the peer's writable flag in config.toml is "
+            "false (default) and the actor cannot mutate it."
+        )
+
+    def _check_actor_for_peer_write(self, project_dir: Path, actor: str) -> None:
+        """LLR-013.1: reject peer writes when the actor is missing/unknown.
+
+        Runs AFTER `_check_writable` (gate ordering, N-S-001). Permits `actor="unknown"`
+        writes that target the local data root (A-010) so an unconfigured single-user
+        machine continues to function for own-projects work.
+        """
+        if actor and actor != "unknown":
+            return
+        resolved_target = project_dir.resolve(strict=False)
+        # data_root is the first entry in writable_roots (set by create_app); writes
+        # under it are exempt from the identity gate.
+        data_root = self._writable_roots[0] if self._writable_roots else None
+        if data_root is not None and resolved_target.is_relative_to(data_root):
+            return
+        raise PeerWriteForbidden(
+            f"Peer write rejected: actor is missing or 'unknown'. "
+            f"Cannot record an identity-attributed change in {resolved_target}. "
+            "Set PROJSTATUS_USER (env var) or [user] name in config.toml."
+        )
 
     def _section_path(self, project_dir: Path, section: SectionName) -> Path:
         return project_dir / f"{section}.md"
@@ -731,19 +829,21 @@ _PEER_WARNED: set[str] = set()
 
 
 def read_peer_addendums(
-    peer_roots: list[tuple[str, Path]], limit: int = 50
+    peer_roots: list[tuple[str, Path, bool]], limit: int = 50
 ) -> list[tuple[str, str, "Addendum"]]:
     """Aggregate recent addendums from peer data roots for the cross-folder inbox.
 
     Each peer is read with its own throwaway StorageService against an
     AppConfig.from_root(...) — this is read-only for our purposes (we never call
-    save_project on a peer config). Missing peer paths are skipped with a one-time
-    stderr warning per (label, path) pair so a stale config doesn't crash the inbox.
+    save_project on a peer config). The `writable` flag (third tuple element) is
+    intentionally ignored here per LLR-005.1 — addendums are always read regardless
+    of writable state. Missing peer paths are skipped with a one-time stderr warning
+    per (label, path) pair so a stale config doesn't crash the inbox.
 
     Returns a flat list of (peer_label, project_slug, Addendum), newest first.
     """
     results: list[tuple[str, str, Addendum]] = []
-    for label, root in peer_roots:
+    for label, root, _writable in peer_roots:
         if not root.exists() or not (root / "projects").exists():
             key = f"{label}={root}"
             if key not in _PEER_WARNED:
@@ -755,7 +855,11 @@ def read_peer_addendums(
             continue
         try:
             peer_config = AppConfig.from_root(root)
-            peer_storage = StorageService(peer_config)
+            # LLR-005.2: throwaway StorageService used for peer reads passes
+            # writable_roots=[] so any save_project call (e.g., a future caller
+            # accidentally wiring a peer service into a write path) fails closed
+            # with PeerWriteForbidden rather than corrupting the peer's data root.
+            peer_storage = StorageService(peer_config, writable_roots=[])
             for slug, addendum in peer_storage.list_recent_addendums(limit=limit, include_archived=False):
                 results.append((label, slug, addendum))
         except Exception as exc:  # noqa: BLE001 — peer reads must never break the inbox

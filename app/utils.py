@@ -39,6 +39,12 @@ def format_date(value: date | None) -> str:
     return value.isoformat() if value else ""
 
 
+def iso_week_label(d: date | None) -> str:
+    if d is None:
+        return ""
+    return f"W{d.isocalendar().week:02d}"
+
+
 def date_to_duration_days(start: date | None, due: date | None) -> int:
     if not start or not due:
         return 1

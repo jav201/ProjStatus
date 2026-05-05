@@ -28,7 +28,7 @@ def test_read_peer_addendums_returns_labelled_entries(tmp_path: Path) -> None:
     alice_slug = _seed(alice_root, "Alpha", "alice")
     bob_slug = _seed(bob_root, "Beta", "bob")
 
-    entries = read_peer_addendums([("alice", alice_root), ("bob", bob_root)], limit=20)
+    entries = read_peer_addendums([("alice", alice_root, False), ("bob", bob_root, False)], limit=20)
     labels = {e[0] for e in entries}
     slugs = {e[1] for e in entries}
     actors = {e[2].actor for e in entries}
@@ -38,7 +38,7 @@ def test_read_peer_addendums_returns_labelled_entries(tmp_path: Path) -> None:
 
 
 def test_missing_peer_root_skipped_without_crash(tmp_path: Path) -> None:
-    entries = read_peer_addendums([("ghost", tmp_path / "does-not-exist")], limit=10)
+    entries = read_peer_addendums([("ghost", tmp_path / "does-not-exist", False)], limit=10)
     assert entries == []
 
 
