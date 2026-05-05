@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import re
 from datetime import date
+from typing import Final
 
 from app.models import MilestoneStatus, Project
 from app.utils import date_to_duration_days, due_from_duration
 
+
+# ISO 8601 week token used in the Gantt axisFormat. `%V` is the strftime-equivalent
+# ISO week directive supported by Mermaid Gantt. If a future Mermaid CDN version
+# pinned in `app/templates/base.html` does not render it as `Wnn`, switch this to
+# the documented fallback (`%U`-style or similar) — TC-038 is conditional on this
+# choice and the increment review packet records the decision (CR-003).
+ISO_WEEK_AXIS_TOKEN: Final[str] = "%V"
 
 _STATUS_RE = r"(?:active|done|crit)"
 TASK_LINE_RE = re.compile(
@@ -39,7 +47,7 @@ def render_timeline(project: Project) -> str:
         "gantt",
         f"  title {project.name}",
         "  dateFormat YYYY-MM-DD",
-        "  axisFormat %b %d",
+        f"  axisFormat %b %d (W{ISO_WEEK_AXIS_TOKEN})",
         "  todayMarker stroke-width:2px,stroke:#22d3ee,opacity:0.6",
         "  section Milestones",
     ]

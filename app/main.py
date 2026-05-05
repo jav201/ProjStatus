@@ -36,7 +36,7 @@ from app.services.exports import ExportService
 from app.services.mermaid import import_timeline, render_timeline
 from app.services.storage import SECTION_NAMES, StorageService, inspect_docx_tags, read_peer_addendums
 from app.settings import Settings
-from app.utils import format_date, format_when, parse_date, slugify
+from app.utils import format_date, format_when, iso_week_label, parse_date, slugify
 
 
 def create_app(root_dir: Path | None = None) -> FastAPI:
@@ -59,7 +59,11 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
         static_dir=code_root / "app" / "static",
         templates_dir=code_root / "app" / "templates",
     )
-    storage = StorageService(config)
+    # LLR-003.2 + LLR-012.1: writable_roots = [data_root, *writable_peer_paths].
+    # Demotion of dangerous writable peers already happened inside Settings.load,
+    # so any (_, path, True) triple here is safe to grant write access.
+    writable_peer_paths = [path for _label, path, writable in peer_roots if writable]
+    storage = StorageService(config, writable_roots=[data_root, *writable_peer_paths])
     exports = ExportService(config, storage)
 
     app = FastAPI(title="ProjStatus")
@@ -69,6 +73,7 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
     templates.env.filters["model_list_json"] = model_list_json
     templates.env.globals["format_date"] = format_date
     templates.env.globals["format_when"] = format_when
+    templates.env.globals["iso_week_label"] = iso_week_label
 
     app.state.config = config
     app.state.storage = storage
@@ -237,6 +242,39 @@ def create_app(root_dir: Path | None = None) -> FastAPI:
             {
                 "blocked_rows": blocked_rows,
                 "roadblock_notes": roadblock_notes,
+            },
+        )
+
+    @app.get("/settings", response_class=HTMLResponse, name="settings")
+    async def settings_page(request: Request) -> HTMLResponse:
+        # LLR-010.1: render data_root, peer rows (label/path/writable/reachable), user.
+        # LLR-010.2 / D-002: non-mutating display. No POST/PUT/PATCH/DELETE handlers
+        # are registered for /settings (LLR-011.1 enforced by absence).
+        state = request.app.state
+        data_root = state.config.root_dir
+        user = state.user
+        peer_rows: list[dict[str, Any]] = []
+        for label, path, writable in state.peer_roots:
+            try:
+                resolved = Path(path).resolve(strict=False)
+                reachable = resolved.is_dir()
+            except OSError:
+                reachable = False
+            peer_rows.append(
+                {
+                    "label": label,
+                    "path": str(path),
+                    "writable": writable,
+                    "reachable": reachable,
+                }
+            )
+        return render_template(
+            request,
+            "settings.html",
+            {
+                "data_root": str(data_root),
+                "user": user,
+                "peer_rows": peer_rows,
             },
         )
 
@@ -1321,6 +1359,8 @@ def build_sidebar_context(storage: StorageService, request: Request, page_contex
         active_nav = "inbox"
     elif path.startswith("/risks"):
         active_nav = "risks"
+    elif path.startswith("/settings"):
+        active_nav = "settings"
 
     risks_count = 0
     sidebar_projects: list[dict[str, Any]] = []

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{# LLR-010.2: this template is non-mutating (display-only).
+   It contains no form / input / submit-button / post-method markup
+   (verified by tests/test_settings_page.py::test_tc_032_settings_template_is_non_mutating).
+   Edits to data_root / peer_roots / user happen via env vars or
+   ~/.config/projstatus/config.toml; the app must be restarted to pick them up. #}
+
+{% block title %}Settings | ProjStatus{% endblock %}
+
+{% block content %}
+  <section class="page-heading compact">
+    <div>
+      <p class="eyebrow">Configuration</p>
+      <h1>Settings</h1>
+      <p class="muted">Per-machine configuration. Read-only — edit via env vars or <code>~/.config/projstatus/config.toml</code> and restart the app.</p>
+    </div>
+  </section>
+
+  <section class="dashboard-grid">
+    <div class="stack">
+      <article class="card">
+        <h2>Data root</h2>
+        <p class="muted">Top-level folder containing <code>projects/</code>, <code>exports/</code>, <code>project_templates/</code>, <code>document_templates/</code>.</p>
+        <p class="settings-value"><code>{{ data_root }}</code></p>
+      </article>
+
+      <article class="card">
+        <h2>User</h2>
+        <p class="muted">Identity recorded on every addendum and CHANGELOG.md line. Resolved from <code>PROJSTATUS_USER</code> env var, then <code>config.toml</code>'s <code>user</code> key, then <code>os.getlogin()</code>.</p>
+        <p class="settings-value"><code>{{ user }}</code></p>
+      </article>
+
+      <article class="card">
+        <h2>Peer roots</h2>
+        <p class="muted">Other operators' data roots merged read-only into the inbox. Mark a peer <code>writable=true</code> in <code>config.toml</code> to opt it into write mode.</p>
+        {% if peer_rows %}
+          <ul class="simple-list settings-peer-list">
+            {% for peer in peer_rows %}
+              <li class="settings-peer-row">
+                <span class="settings-peer-label"><strong>{{ peer.label }}</strong></span>
+                <span class="settings-peer-path"><code>{{ peer.path }}</code></span>
+                <span class="settings-peer-writable chip-muted">{% if peer.writable %}RW{% else %}RO{% endif %}</span>
+                <span class="settings-peer-reachable chip-muted">{% if peer.reachable %}reachable{% else %}unreachable{% endif %}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">No peer roots configured.</p>
+        {% endif %}
+      </article>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,177 @@
+{
+  "project": "ProjStatus",
+  "batch_id": "2026-05-04-batch-01",
+  "batch_objective": "Add per-peer write-mode flag for peer roots, a read-only Settings page surfacing data_root/peer_roots/user, and an ISO 8601 calendar-week indicator on tasks, milestones, and the Gantt chart.",
+  "current_phase": 6,
+  "phase_status": "awaiting-sync",
+  "iterations_per_phase": {"1": 3, "2": 3, "3": 8, "4": 1, "5": 1, "6": 1},
+  "artifacts": {
+    "01-requirements.md": ".dev-flow/01-requirements.md",
+    "02-review.md": ".dev-flow/02-review.md",
+    "change-requests-backlog.md": ".dev-flow/change-requests-backlog.md",
+    "increment-001.md": ".dev-flow/03-increments/increment-001.md",
+    "increment-002.md": ".dev-flow/03-increments/increment-002.md",
+    "increment-003.md": ".dev-flow/03-increments/increment-003.md",
+    "increment-004.md": ".dev-flow/03-increments/increment-004.md",
+    "increment-005.md": ".dev-flow/03-increments/increment-005.md",
+    "increment-006a.md": ".dev-flow/03-increments/increment-006a.md",
+    "increment-006b.md": ".dev-flow/03-increments/increment-006b.md",
+    "increment-007.md": ".dev-flow/03-increments/increment-007.md",
+    "04-validation.md": ".dev-flow/04-validation.md",
+    "05-postmortem.md": ".dev-flow/05-postmortem.md",
+    "functionality.md": ".dev-flow/06-docs/functionality.md",
+    "executive-summary.md": ".dev-flow/06-docs/executive-summary.md",
+    "diagrams/architecture.mmd": ".dev-flow/06-docs/diagrams/architecture.mmd",
+    "diagrams/writable-peer-sequence.mmd": ".dev-flow/06-docs/diagrams/writable-peer-sequence.mmd",
+    "diagrams/peer-roots-schema.mmd": ".dev-flow/06-docs/diagrams/peer-roots-schema.mmd",
+    "traceability-matrix.md": ".dev-flow/06-docs/traceability-matrix.md"
+  },
+  "decisions_log": [
+    {
+      "phase": 1,
+      "date": "2026-05-04",
+      "decision": "Peer-root write enable is per-peer flag in config.toml (writable=true|false), no runtime UI.",
+      "rationale": "Smaller blast radius; cannot be flipped accidentally from the browser."
+    },
+    {
+      "phase": 1,
+      "date": "2026-05-04",
+      "decision": "Data-root configuration UI is read-only display only.",
+      "rationale": "Editing data_root requires restart; defer the editable surface to a future batch."
+    },
+    {
+      "phase": 1,
+      "date": "2026-05-04",
+      "decision": "Calendar-week numbering uses ISO 8601 (Monday-start, W01 = first week containing Thursday).",
+      "rationale": "Matches Python date.isocalendar(); standard in LATAM/EU business contexts."
+    },
+    {
+      "phase": 1,
+      "date": "2026-05-04",
+      "decision": "approved",
+      "notes": "User approved phase-1 gate report (5 US, 11 HLR, 15 LLR, 26 TC, validation distribution 11/11/4/0/0/0). Advancing to phase 2."
+    },
+    {
+      "phase": 2,
+      "date": "2026-05-04",
+      "decision": "iterate-recommended",
+      "notes": "Cross-agent review (architect+qa-reviewer+security-reviewer) found 5 blockers, 14 major, 15 minor. Blockers: B-001 LLR-009.1 round-trip vs parser; B-002 HLR-007 missing data shapes; B-003 actor='unknown' on writable peer; B-004 path canonicalization missing; B-005 writable-peer guardrails missing. Awaiting user decision on iteration scope."
+    },
+    {
+      "phase": 1,
+      "date": "2026-05-04",
+      "decision": "iteration-2-applied",
+      "notes": "User chose option 1 (single combined pass). Applied: 5 blockers (B-001..B-005), 14 majors (M-A-001..M-A-005, M-Q-001..M-Q-005, M-S-001..M-S-004), 15 minors. New counts: 14 HLR, 24 LLR, 38 TC. Method distribution: 18 unit / 19 integration / 1 inspection. 3 new HLRs (HLR-012/013/014). 9 new LLRs. LLR-009.1 split into LLR-009.1 + LLR-009.2. Self-review clean: 0 'should' inside HLR/LLR statements. Awaiting re-approval at phase-1 gate."
+    },
+    {
+      "phase": 1,
+      "date": "2026-05-04",
+      "decision": "approved",
+      "notes": "User approved revised phase-1 gate report (iteration 2). Advancing to phase 2 re-review."
+    },
+    {
+      "phase": 2,
+      "date": "2026-05-04",
+      "decision": "iterate-recommended",
+      "notes": "Phase-2 iteration-2 review found all 5 iteration-1 blockers and 14 iteration-1 majors closed, BUT 2 NEW blockers (B-006 LLR-009.2 wrong import_timeline API; B-Q-001 TC-038 self-contradicting %V assertion) plus 7 NEW majors (M-A-006 method-dist arithmetic 18/19 swapped to 19/18; M-A-007 sanitizer-chain prose; M-A-008 LLR-012.1 insertion point; M-Q-006 negative chip assertion; M-Q-007 HLR-014 round-trip TC; N-S-001 gate ordering; N-S-002 sensitive home-dir children) plus 8 minors. Awaiting user decision on iteration scope."
+    },
+    {
+      "phase": 1,
+      "date": "2026-05-04",
+      "decision": "iteration-3-applied",
+      "notes": "User chose option 1 (single combined pass). Applied 2 blockers + 7 majors + 8 minors via 14 surgical edits. Counts unchanged: 14 HLR, 24 LLR, 38 TC. Method distribution corrected to 19 unit / 18 integration / 1 inspection. Inline closure check (orchestrator, no full re-fan-out) verified all 17 iteration-2 findings closed; self-review clean (0 'should' inside HLR/LLR statements; 38 unique TCs)."
+    },
+    {
+      "phase": 2,
+      "date": "2026-05-04",
+      "decision": "approve-clean (closure-check)",
+      "notes": "SHORT phase-2 closure-check verification inlined into 02-review.md §7. All iteration-2 findings closed; no new findings introduced. Awaiting user gate decision: approve and advance to phase 3, or run full re-fan-out for stronger assurance."
+    },
+    {
+      "phase": 2,
+      "date": "2026-05-04",
+      "decision": "conditional-approve-with-deferred-CRs",
+      "notes": "User chose full re-fan-out + deferred-CR handling. Iteration-3 doc has 1 blocker (F1 security: LLR-013.3 entity-bypass) + 9 majors + 15 minors, all captured as CR-001..CR-010 in change-requests-backlog.md. HIGH-severity CRs (CR-001, CR-002) MUST be addressed before phase 5; MEDIUM-severity CRs by phase 5; CR-002/003/004/008 should land by phase 4 to avoid validation gaps. Phase 2 closes; awaiting user approval to advance to phase 3 against the iteration-3 requirements doc as-is, with the CR backlog tracking deferred work."
+    },
+    {
+      "phase": 3,
+      "date": "2026-05-04",
+      "decision": "approved",
+      "notes": "User approved phase-3 entry. Starting increment 1: LLR-006.1 (iso_week_label helper in app/utils.py) + LLR-007.2 (Jinja global registration in app/main.py::create_app). Tests: TC-006, TC-025, TC-027. Estimated 3 files: app/utils.py, app/main.py, tests/test_iso_week_label.py."
+    },
+    {
+      "phase": 3,
+      "date": "2026-05-04",
+      "decision": "increment-1-approved",
+      "notes": "Increment 1 closed: LLR-006.1 + LLR-007.2 implemented; 9 new tests pass; 70 total tests pass (no regression). User approved Increment 2 start: LLR-007.1 (task-card chip) + LLR-008.1 (milestone-row chip). Tests TC-007, TC-008, TC-026, TC-028."
+    },
+    {
+      "phase": 3,
+      "date": "2026-05-04",
+      "decision": "increment-2-awaiting-gate",
+      "notes": "Increment 2 closed: LLR-007.1 + LLR-008.1 implemented; 8 new tests pass; 78 total tests pass (no regression). Discovered pre-existing render_timeline None→today defaulting for tasks (out of scope; flagged for HLR-009 increment). Negative LLR-007.1 case verified via direct Jinja-env render. Awaiting user approval to start Increment 3 (Mermaid axis: LLR-009.1 + LLR-009.2 + LLR-014.1, plus CR-002/003/004 fixes)."
+    },
+    {
+      "phase": 3,
+      "date": "2026-05-04",
+      "decision": "increment-3-awaiting-gate",
+      "notes": "Increment 3 closed: LLR-009.1 + LLR-009.2 + LLR-014.1 implemented (axisFormat now '%b %d (W%V)'; ISO_WEEK_AXIS_TOKEN constant exported). 5 new tests pass; 83 total (no regression). CR-002, CR-003, CR-004 closed in same pass. Backlog: 3/10 closed, 7 remaining (1 HIGH CR-001, 2 MEDIUM CR-005/006, 4 LOW). Awaiting user approval to start Increment 4 (peer-roots config schema: LLR-001.1, -001.2, -002.1)."
+    },
+    {
+      "phase": 3,
+      "date": "2026-05-04",
+      "decision": "increment-4-awaiting-gate",
+      "notes": "Increment 4 closed: LLR-001.1 + LLR-001.2 + LLR-002.1 implemented. _resolve_peer_roots now returns 3-tuples (label, path, writable); writable defaults to False; non-bool coerces to False via 'is True'. 11 new tests pass; 94 total (no regression). 2 existing test files migrated to 3-tuple shape. 5 files touched (at cap). 7 LLRs done of 24. Awaiting user approval to start Increment 5 (storage gating + canonicalization + writable-peer guardrails: LLR-003.1, -003.2, -003.3, -012.1)."
+    },
+    {
+      "phase": 3,
+      "date": "2026-05-05",
+      "decision": "increment-5-awaiting-gate",
+      "notes": "Increment 5 closed: LLR-003.1 + LLR-003.2 + LLR-003.3 + LLR-012.1 implemented. New PeerWriteForbidden exception, _check_writable canonicalization gate in StorageService, _demote_dangerous_writable_peers post-pass in Settings.load with 13 dangerous-path predicates + warn-once-per-process. 7 new tests pass; 101 total (no regression). 5 files touched (at cap). 11 LLRs done of 24. CR-006 stays open (venv paths require LLR text update). Awaiting user approval to start Increment 6 (US-003: actor + inbox + identity, closes CR-001 + CR-005)."
+    },
+    {
+      "phase": 3,
+      "date": "2026-05-05",
+      "decision": "increment-6a-awaiting-gate",
+      "notes": "Increment 6a closed: LLR-013.1 + LLR-013.2 + LLR-013.3 implemented. CR-001 (HIGH entity-bypass) + CR-005 (Unicode bidi/zero-width) closed. _sanitize_user_candidate strips controls/bidi/zero-width and rejects newlines. _sanitize_changelog_field implements 4-step pipeline: newline-replace -> &-pre-escape -> bracket/pipe/angle-escape -> cap-200. _check_actor_for_peer_write rejects peer writes with actor unknown/empty (after writable check per N-S-001). 22 new tests pass; 123 total (no regression). 4 files touched. 14 LLRs done of 24. 5 CRs closed of 10. Awaiting user approval to start Increment 6b (LLR-004.1, -005.1, -005.2, -005.3 — inbox + actor display)."
+    },
+    {
+      "phase": 3,
+      "date": "2026-05-05",
+      "decision": "increment-6b-awaiting-gate",
+      "notes": "Increment 6b closed: LLR-004.1 + LLR-005.1 (verified — pre-existing behavior conforms) + LLR-005.2 (throwaway StorageService writable_roots=[]) + LLR-005.3 (inbox '(claimed)' qualifier on peer rows). 5 new tests pass; 128 total (no regression). 3 files touched. 18 LLRs done of 24. 5 CRs closed of 10. Awaiting user approval to start Increment 7 (US-005 Settings page: LLR-010.1, LLR-010.2, LLR-011.1) — final user-story increment."
+    },
+    {
+      "phase": 3,
+      "date": "2026-05-05",
+      "decision": "increment-7-awaiting-gate (PHASE 3 CLOSES)",
+      "notes": "Increment 7 closed: LLR-010.1 + LLR-010.2 + LLR-011.1 implemented. New GET /settings route + settings.html template + sidebar nav link. 10 new tests pass; 138 total (no regression). 4 files touched. ALL 24 LLRs implemented (24/24). 5 CRs closed of 10. Phase 3 complete; awaiting user approval to advance to Phase 4 (validation execution against 38 TCs)."
+    },
+    {
+      "phase": 4,
+      "date": "2026-05-05",
+      "decision": "validation-pass-with-1-pending-uat",
+      "notes": "Phase 4 complete. 38/38 TCs PASS (none failed). 14/14 HLR + 24/24 LLR validated. 138 pytest pass, 1 pre-existing warning, no regressions. One pending item: TC-038 manual UAT for Mermaid CDN %V token render (R-005, 5-minute browser check). All 7 §5.3 batch acceptance criteria met. 04-validation.md authored with full evidence per TC. Awaiting user gate decision: advance to phase 5 (post-mortem) or run the manual UAT first."
+    },
+    {
+      "phase": 5,
+      "date": "2026-05-05",
+      "decision": "postmortem-complete",
+      "notes": "Phase 5 complete. architect + qa-reviewer co-authored 05-postmortem.md (7 sections: exec summary, what worked, what didn't, root causes for 3+3 iterations, metrics + decisions log highlights, 14 ranked items proposed for next batch, verdict). Root cause of multi-iteration phases identified as 'phase-1 LLRs authored without code-grounding'; mitigation = add file:symbol citation requirement to dev-flow skill. CR-deferral pathway recommended as default at iteration-2 gate. Awaiting user gate decision: close batch / open new batch / iterate."
+    },
+    {
+      "phase": 6,
+      "date": "2026-05-05",
+      "decision": "documentation-complete",
+      "notes": "Phase 6 complete. docs-writer authored functionality.md (10 sections, 3 embedded Mermaid diagrams + 3 standalone .mmd files in diagrams/) for technical stakeholders. presentation-builder authored executive-summary.md (5 sections, ~660 words) for non-technical stakeholders. Traceability matrix updated with final phase-4 PASS status + file:line links to implementation. All 6 phase-6 artifacts present: functionality.md, executive-summary.md, traceability-matrix.md, diagrams/architecture.mmd, diagrams/writable-peer-sequence.mmd, diagrams/peer-roots-schema.mmd. Awaiting user approval to close batch and run /dev-flow-sync-en post commit."
+    },
+    {
+      "phase": 6,
+      "date": "2026-05-05",
+      "decision": "approved",
+      "notes": "User approved phase-6 documentation as-is. Batch is complete. State moved to awaiting-sync. Outstanding: 1 manual UAT (TC-038 Mermaid CDN render) + 5 open CRs (CR-006/-007/-008/-009/-010) carried forward. Next action: commit + push + merge the PR, then run /dev-flow-sync-en to upload .dev-flow/ artifacts to the Obsidian vault."
+    }
+  ],
+  "obsidian_synced": false,
+  "created_at": "2026-05-04T00:00:00Z"
+}

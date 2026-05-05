@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import date
 
 from app.models import (
@@ -9,7 +10,7 @@ from app.models import (
     Project,
     Task,
 )
-from app.services.mermaid import import_timeline, render_timeline
+from app.services.mermaid import ISO_WEEK_AXIS_TOKEN, import_timeline, render_timeline
 
 
 def _project_with_one_each() -> Project:
@@ -83,3 +84,64 @@ def test_unsupported_lines_surface_errors() -> None:
     _, _, errors, supported = import_timeline(project, text)
     assert not supported
     assert any("some random line" in e for e in errors)
+
+
+def _axis_format_line(text: str) -> str:
+    for raw in text.splitlines():
+        if raw.strip().startswith("axisFormat "):
+            return raw
+    raise AssertionError("axisFormat line not found in rendered Mermaid source")
+
+
+# TC-009 — HLR-009 behavioural: axisFormat line contains the week token
+def test_tc_009_render_timeline_axis_contains_week_token() -> None:
+    text = render_timeline(_project_with_one_each())
+    axis_line = _axis_format_line(text)
+    assert ISO_WEEK_AXIS_TOKEN in axis_line
+
+
+# TC-014 — HLR-014 behavioural: literal `W` in axisFormat, round-trip ok=True,
+# conditional `%V` absence (only when fallback chosen).
+def test_tc_014_axis_has_w_and_roundtrip_ok() -> None:
+    project = _project_with_one_each()
+    text = render_timeline(project)
+    axis_line = _axis_format_line(text)
+    assert "W" in axis_line
+    fresh = _project_with_one_each()
+    _, _imported_msgs, _errors, ok = import_timeline(fresh, text)
+    assert ok is True
+    if ISO_WEEK_AXIS_TOKEN != "%V":
+        assert "%V" not in axis_line
+
+
+# TC-029 — LLR-009.1: literal `W` appears ONLY on the axisFormat line.
+def test_tc_029_w_only_on_axis_format_line() -> None:
+    text = render_timeline(_project_with_one_each())
+    axis_line = _axis_format_line(text)
+    for raw in text.splitlines():
+        if raw is axis_line or raw.strip().startswith("axisFormat "):
+            continue
+        assert "W" not in raw, f"unexpected W on non-axis line: {raw!r}"
+
+
+# TC-030 — LLR-009.2 (per CR-002 deepcopy fix, CR-004 list naming): round-trip
+# is byte-identical when the input is a deep-copied project model.
+def test_tc_030_roundtrip_byte_identical_via_deepcopy() -> None:
+    original = _project_with_one_each()
+    rendered_before = render_timeline(original)
+    imported, _imported_msgs, _errors, ok = import_timeline(deepcopy(original), rendered_before)
+    assert ok is True
+    assert render_timeline(imported) == rendered_before
+
+
+# TC-038 — LLR-014.1: same shape as TC-014 plus a redundancy check on the
+# axis-line `Wnn`-source presence (W is in the axis-format directive).
+def test_tc_038_fallback_token_assertion_is_conditional() -> None:
+    text = render_timeline(_project_with_one_each())
+    axis_line = _axis_format_line(text)
+    assert "W" in axis_line
+    fresh = _project_with_one_each()
+    _, _imported_msgs, _errors, ok = import_timeline(fresh, text)
+    assert ok is True
+    if ISO_WEEK_AXIS_TOKEN != "%V":
+        assert "%V" not in axis_line

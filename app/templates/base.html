@@ -53,6 +53,9 @@
         <a class="sidebar-link" href="{{ request.url_for('exports') }}" data-active="{{ 'true' if active_nav == 'exports' else 'false' }}">
           <span class="sidebar-icon">⤓</span> Exports
         </a>
+        <a class="sidebar-link" href="{{ request.url_for('settings') }}" data-active="{{ 'true' if active_nav == 'settings' else 'false' }}">
+          <span class="sidebar-icon">⚙</span> Settings
+        </a>
 
         <div class="sidebar-section-row">
           <p class="sidebar-section">Projects</p>
