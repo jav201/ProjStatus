@@ -18,7 +18,7 @@
             <span class="milestone-status status-{{ m.status.value }}" title="Status: {{ m.status.value }}">{{ m.status.value }}</span>
             <strong class="milestone-title">{{ m.title }}</strong>
             <span class="milestone-meta">
-              {% if m.target_date %}<span class="chip-muted">◷ {{ m.target_date }}</span>{% endif %}
+              {% if m.target_date %}<span class="chip-muted">◷ {{ m.target_date }}</span><span class="week-chip">{{ iso_week_label(m.target_date) }}</span>{% endif %}
               {% if m.owner_person_id and people_map.get(m.owner_person_id) %}<span class="chip-muted">{{ people_map[m.owner_person_id].name }}</span>{% endif %}
             </span>
             <div class="milestone-actions">

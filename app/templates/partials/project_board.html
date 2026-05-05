@@ -20,6 +20,7 @@
               {% if task.description %}<p class="task-desc">{{ task.description }}</p>{% endif %}
               <div class="chip-row">
                 <span class="chip-priority chip-priority-{{ task.priority.value }}">{{ task.priority.value }}</span>
+                {% if task.start_date %}<span class="week-chip">{{ iso_week_label(task.start_date) }}{% if task.due_date and iso_week_label(task.due_date) != iso_week_label(task.start_date) %}–{{ iso_week_label(task.due_date) }}{% endif %}</span>{% endif %}
                 {% if task.due_date %}<span class="chip-muted">{{ task.due_date }}</span>{% endif %}
                 {% if task.subtasks %}
                   {% set sub_done = task.subtasks|selectattr("done")|list|length %}

@@ -1,0 +1,44 @@
+classDiagram
+    class Settings {
+      +Path data_root
+      +list~tuple~ peer_roots
+      +str user
+      +load(code_root) Settings
+    }
+    class PeerRootTriple {
+      <<tuple>>
+      +str label
+      +Path path
+      +bool writable
+    }
+    class AppConfig {
+      +Path root_dir
+      +Path projects_dir
+      +Path exports_dir
+      +Path project_templates_dir
+      +Path document_templates_dir
+    }
+    class StorageService {
+      +AppConfig config
+      -list~Path~ _writable_roots
+      +save_project(project, sections, actor) Addendum
+      -_check_writable(project_dir)
+      -_check_actor_for_peer_write(project_dir, actor)
+    }
+    class PeerWriteForbidden {
+      +str peer_label
+    }
+    class AppState {
+      <<state>>
+      +AppConfig config
+      +StorageService storage
+      +str user
+      +list~PeerRootTriple~ peer_roots
+    }
+
+    Settings "1" --> "*" PeerRootTriple : peer_roots
+    Settings ..> AppState : populates via create_app
+    AppConfig --> StorageService : injected
+    StorageService ..> PeerWriteForbidden : raises
+    PeerWriteForbidden --|> PermissionError
+    AppState --> StorageService

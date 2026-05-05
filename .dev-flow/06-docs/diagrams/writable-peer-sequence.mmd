@@ -1,0 +1,40 @@
+sequenceDiagram
+    actor Operator
+    participant Browser
+    participant Route as FastAPI route<br/>(app/main.py)
+    participant Storage as StorageService
+    participant CheckW as _check_writable<br/>(LLR-003.1)
+    participant CheckA as _check_actor_for_peer_write<br/>(LLR-013.1)
+    participant FS as Disk
+
+    Operator->>Browser: edit task on writable peer
+    Browser->>Route: POST /projects/<peer-slug>/tasks/<id>
+    Route->>Route: actor = current_actor(request)<br/>= app.state.user
+    Route->>Storage: save_project(project, sections,<br/>actor=<user>)
+    Storage->>Storage: project_dir = projects_dir / slug
+    Storage->>CheckW: resolve(project_dir),<br/>resolve(writable_roots)
+    alt project_dir not under any writable root
+        CheckW-->>Storage: raise PeerWriteForbidden<br/>(writability message)
+        Storage-->>Route: PermissionError
+        Route-->>Browser: 500 / error redirect
+        Note over CheckA,FS: CheckA never runs;<br/>zero bytes written
+    else under writable root
+        CheckW-->>Storage: ok
+        Storage->>CheckA: actor in {empty, None, "unknown"}?<br/>under data_root?
+        alt actor missing AND under writable peer (NOT data_root)
+            CheckA-->>Storage: raise PeerWriteForbidden<br/>(actor message)
+            Storage-->>Route: PermissionError
+            Note over FS: zero bytes written
+        else actor ok OR under data_root (A-010 carve-out)
+            CheckA-->>Storage: ok
+            Storage->>FS: _write_text(content.md, ...)
+            Storage->>FS: _write_text(timeline.mmd)
+            Storage->>FS: _write_text(project.json)
+            Storage->>FS: _write_text(history/<ts>.json)
+            Storage->>FS: _append_changelog<br/>+ _sanitize_changelog_field
+            Storage-->>Route: Addendum
+            Route-->>Browser: 303 redirect
+        end
+    end
+
+    Note over CheckW,CheckA: Gate ordering (N-S-001 fix):<br/>writability FIRST, actor SECOND.<br/>A non-writable + actor=unknown call<br/>raises a writability error,<br/>not an actor error (TC-035c).
